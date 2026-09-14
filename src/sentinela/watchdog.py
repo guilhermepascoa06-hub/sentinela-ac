@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from sentinela import alerts
 from sentinela.config import Configuration, Secrets
-from sentinela.domain import now, utc
+from sentinela.domain import digest, now, utc
 from sentinela.models import MonitorRun, Notification, SourceHealth
 
 
@@ -29,6 +29,8 @@ class WatchdogVerdict:
     actions: list[str]
     last_success: datetime | None
     hours_since: float | None
+    # Stable signature of WHAT is wrong, so an unchanged situation is not re-announced.
+    fingerprint: str = ""
 
 
 def evaluate(
@@ -113,6 +115,7 @@ def evaluate(
             ],
             utc(last.started_at),
             elapsed,
+            fingerprint=digest(sorted(problems)),
         )
     return WatchdogVerdict(
         True,
@@ -128,7 +131,15 @@ def evaluate(
 def notify(
     session: Session, verdict: WatchdogVerdict, config: Configuration, secrets: Secrets
 ) -> int:
-    """A critical verdict alerts once per calendar day, not once per check."""
+    """How often the user hears about a problem depends on what kind of problem it is.
+
+    CRITICAL means nothing is being monitored right now: repeat it every day until it is
+    fixed. WARNING means the system works but something needs attention -- announce it
+    when the situation CHANGES and then stay quiet. Repeating "9 sources are degraded"
+    every morning about the same nine permanently-broken portals is exactly the useless
+    daily message this project refuses to send; the per-source GitHub issues already
+    carry the detail and survive until someone closes them.
+    """
     from sentinela.pipeline import channels_for, queue_notification
 
     if verdict.severity == "OK":
@@ -136,10 +147,14 @@ def notify(
     channels = channels_for(config)
     if not channels:
         return 0
-    stamp = now().astimezone(config.zone).date().isoformat()
+    scope = (
+        now().astimezone(config.zone).date().isoformat()
+        if verdict.severity == "CRITICAL"
+        else verdict.fingerprint
+    )
     return queue_notification(
         session,
-        key=alerts.idempotency_key("SYSTEM", "watchdog", verdict.title, stamp),
+        key=alerts.idempotency_key("SYSTEM", "watchdog", verdict.title, scope),
         category="SYSTEM",
         body=alerts.system_message(verdict.title, verdict.detail, verdict.actions),
         channels=channels,

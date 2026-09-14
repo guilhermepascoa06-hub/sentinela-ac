@@ -662,3 +662,51 @@ def test_alert_queued_before_credentials_exist_is_delivered_later(
     assert row.status == "SENT"
     assert sent == ["telegram:k"]
     assert report.notifications_sent == 1
+
+
+def test_warning_watchdog_speaks_once_per_situation_not_once_per_day(
+    session: Session, source: Source, config: Configuration, secrets: Secrets
+) -> None:
+    """Regression: a WARNING was keyed on the calendar date, so the same nine
+    permanently-broken portals produced an 'infrastructure problem' message every single
+    morning. The per-source GitHub issues already carry that detail."""
+    from sentinela.domain import now
+    from sentinela.models import SourceHealth
+
+    session.add(MonitorRun(kind="daily", status="SUCCESS", started_at=now()))
+    state = session.get(SourceHealth, source.id)
+    state.state = "OPEN"
+    session.commit()
+
+    verdict = watchdog_module.evaluate(session, config)
+    assert verdict.severity == "WARNING"
+    assert watchdog_module.notify(session, verdict, config, secrets) == 1
+    session.commit()
+
+    # Same situation tomorrow: silence.
+    assert watchdog_module.notify(session, verdict, config, secrets) == 0
+    session.commit()
+
+    # The situation gets worse: that is news.
+    worse = watchdog_module.WatchdogVerdict(
+        True,
+        "WARNING",
+        verdict.title,
+        verdict.detail,
+        verdict.actions,
+        verdict.last_success,
+        verdict.hours_since,
+        fingerprint="outro-conjunto",
+    )
+    assert watchdog_module.notify(session, worse, config, secrets) == 1
+
+
+def test_critical_watchdog_keeps_repeating_daily(
+    session: Session, config: Configuration, secrets: Secrets
+) -> None:
+    """A stopped monitor is urgent and unresolved: it must be said again every day."""
+    verdict = watchdog_module.evaluate(session, config)
+    assert verdict.severity == "CRITICAL"
+    assert watchdog_module.notify(session, verdict, config, secrets) == 1
+    session.commit()
+    assert watchdog_module.notify(session, verdict, config, secrets) == 0
