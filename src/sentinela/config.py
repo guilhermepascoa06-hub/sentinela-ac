@@ -36,6 +36,10 @@ class Monitoring(BaseModel):
     heartbeat_stale_minutes: int = 55
     watchdog_hours: int = 30
     freshness_days: int = 90
+    # Rendering is slow, so it stays a last resort with a hard budget per run.
+    browser_enabled: bool = True
+    browser_max_pages: int = 12
+    browser_timeout_seconds: float = 45
     registration_reminders: list[int] = [7, 3, 1]
     exam_reminders: list[int] = [14, 7, 3, 1]
 

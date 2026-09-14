@@ -72,6 +72,7 @@ class RunReport:
     notifications_sent: int = 0
     errors: int = 0
     drifted: list[str] = field(default_factory=list)
+    rendered: list[str] = field(default_factory=list)
     degraded: list[str] = field(default_factory=list)
     review_queue: int = 0
     detail: dict[str, Any] = field(default_factory=dict)
@@ -1150,6 +1151,18 @@ def run_monitor(
     sources = list(session.execute(query).scalars().all())
     deadline = now() + timedelta(minutes=config.monitoring.max_run_minutes)
 
+    from sentinela.browser import BrowserFetcher
+
+    browser = (
+        BrowserFetcher(
+            timeout_ms=int(config.monitoring.browser_timeout_seconds * 1000),
+            max_bytes=config.monitoring.max_document_bytes,
+            min_interval=config.monitoring.minimum_request_interval_seconds,
+            max_pages=config.monitoring.browser_max_pages,
+        )
+        if config.monitoring.browser_enabled and not dry_run
+        else None
+    )
     with Fetcher(
         timeout=config.monitoring.source_timeout_seconds,
         max_attempts=config.monitoring.max_attempts,
@@ -1205,6 +1218,7 @@ def run_monitor(
                 last_modified=state.last_modified if state else None,
                 max_pages=config.monitoring.max_pdf_pages,
                 ocr_pages=config.monitoring.max_ocr_pages,
+                browser=browser,
             )
             log.info(
                 "Fonte %s: %s, %d documentos",
@@ -1226,7 +1240,18 @@ def run_monitor(
                     llm_provider=llm,
                 )
             update_health(session, source, outcome, config=config, report=report, run_id=monitor.id)
+            if outcome.rendered:
+                record_event(
+                    session,
+                    monitor.id,
+                    kind="SOURCE_RENDERED",
+                    message=f"{source.id}: coleta recuperada com navegador",
+                    context={"source_id": source.id},
+                )
+                report.rendered.append(source.id)
             session.commit()
+        if browser is not None:
+            browser.close()
 
     if not dry_run:
         generate_deadline_alerts(session, config, today, report, monitor.id)
@@ -1256,6 +1281,7 @@ def run_monitor(
     monitor.errors = report.errors
     monitor.detail = {
         "drifted": report.drifted,
+        "rendered": report.rendered,
         "degraded": sorted(set(report.degraded)),
         "documents_new": report.documents_new,
         "review_queue": report.review_queue,

@@ -399,11 +399,17 @@ painel.
 
 ## Limitações conhecidas
 
-- **Portais que exigem JavaScript** (Banco do Brasil, Portal Candidato da DPE-AC,
-  Transparência Acre) não renderizam sem navegador. Ficam marcados como degradados em vez
-  de silenciosamente vazios. Playwright está previsto como dependência opcional.
-- **Portais que bloqueiam automação** (CAIXA, IDIB, IBGE) são registrados como degradados.
-  O sistema **não** contorna bloqueio, CAPTCHA nem autenticação.
+- **Portais que exigem JavaScript** são resolvidos por um navegador real (Playwright,
+  Chromium headless), acionado só quando o HTTP simples é barrado de um jeito que um
+  navegador pode legitimamente abrir, ou quando a página responde mas não produz nada —
+  a assinatura de uma lista montada por JavaScript. Orçamento de 12 páginas por execução.
+- **O navegador nunca contorna proteção.** CAPTCHA, desafio anti-robô ou tela de login
+  fazem a fonte permanecer degradada. A informação não é pública para um cliente
+  automatizado, e fingir o contrário seria desonesto além de frágil.
+- **Bloqueio por IP de nuvem.** IBGE, Banco do Brasil e TRE-AC respondem de um IP
+  residencial mas devolvem 403 ao runner do GitHub, e nem o navegador muda isso: o filtro
+  é de rede, não de renderização. FUNAI devolve 401 (acesso restrito), IDIB 525 e SEAD 502
+  — erros da própria origem. Todos ficam degradados, com issue aberta automaticamente.
 - **Diários oficiais** (DOU, Diário do Acre) são enormes e têm busca dinâmica: a cobertura
   genérica não é leitura integral.
 - **OCR** só roda se o Tesseract estiver instalado; sem ele, PDF escaneado vai para a fila

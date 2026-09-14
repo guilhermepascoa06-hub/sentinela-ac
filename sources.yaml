@@ -190,6 +190,7 @@ sources:
     discovery_method: "html"
     enabled: true
     trust_status: "TRUSTED"
+    render: true
     allowed_hosts: ["defensoria.ac.def.br","portalcandidato.ac.def.br"]
     seed_urls: ["https://portalcandidato.ac.def.br/portal"]
     link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"

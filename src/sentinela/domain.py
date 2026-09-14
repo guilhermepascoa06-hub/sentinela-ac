@@ -180,6 +180,8 @@ class SourceSpec(BaseModel):
     max_documents: int = 10
     max_depth: int = 2
     expected_min_links: int = 0
+    # True when the listing is built by JavaScript and plain HTTP sees an empty page.
+    render: bool = False
     validation_url: str = ""
     validated_at: str | datetime | None = None
     limitations: str = ""

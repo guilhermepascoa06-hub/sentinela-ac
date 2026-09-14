@@ -12,11 +12,11 @@ dependencies = [
   "pydantic>=2.11,<3", "pydantic-settings>=2.10,<3", "httpx>=0.28,<0.29",
   "beautifulsoup4>=4.13,<5", "pymupdf>=1.26.4,<2", "pypdf>=6,<7",
   "pyyaml>=6.0.2,<7", "typer>=0.16,<1", "tzdata>=2025.2", "cryptography>=45",
+  "playwright>=1.55,<2",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.4,<10", "pytest-cov>=6,<8", "respx>=0.22,<1", "ruff>=0.12", "mypy>=1.17", "types-PyYAML", "types-beautifulsoup4", "pip-audit>=2.9", "bandit>=1.8"]
-browser = ["playwright>=1.55,<2"]
 
 [project.scripts]
 sentinela = "sentinela.cli:app"

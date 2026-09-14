@@ -15,6 +15,7 @@ from sentinela.models import Source, SourceHealth
 
 REGISTRY_PATH = Path("sources.yaml")
 CONFIG_FIELDS = (
+    "render",
     "allowed_hosts",
     "seed_urls",
     "link_pattern",
@@ -132,6 +133,7 @@ def spec_from_row(row: Source) -> SourceSpec:
         ),
         max_documents=int(config.get("max_documents") or 10),
         max_depth=int(config.get("max_depth") or 2),
+        render=bool(config.get("render") or False),
         expected_min_links=int(config.get("expected_min_links") or 0),
         validation_url=str(config.get("validation_url") or row.base_url),
         validated_at=row.validated_at,

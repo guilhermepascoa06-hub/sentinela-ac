@@ -60,6 +60,7 @@ class SourceOutcome:
     etag: str | None = None
     last_modified: str | None = None
     index_unchanged: bool = False
+    rendered: bool = False
 
 
 def relevant(url: str, label: str, pattern: re.Pattern[str]) -> bool:
@@ -125,6 +126,7 @@ def collect(
     max_pages: int = 180,
     ocr_pages: int = 12,
     allow_ocr: bool = True,
+    browser: Any = None,
 ) -> SourceOutcome:
     outcome = SourceOutcome(source_id=spec.id, status="FAILED")
     try:
@@ -180,6 +182,38 @@ def collect(
         outcome.recovery_method = method
         candidates = [(url, label) for url, label in recovered if relevant(url, label, pattern)]
 
+    # Last rung of the ladder: render the page in a real browser. Only when plain HTTP
+    # was shut out in a way a browser might legitimately open, or when the page answered
+    # fine but produced nothing -- the signature of a list built by JavaScript.
+    if browser is not None and not outcome.index_unchanged:
+        from sentinela.browser import should_escalate
+
+        if should_escalate(index_response, len(candidates), spec.render):
+            rendered = browser.render(spec.base_url)
+            if rendered.ok and rendered.content:
+                document = extract(
+                    rendered.content, rendered.url, "html", allowed_hosts=spec.allowed_hosts
+                )
+                found = [
+                    (url, label) for url, label in document.links if relevant(url, label, pattern)
+                ]
+                if found:
+                    outcome.rendered = True
+                    outcome.recovery_method = "browser"
+                    outcome.http_status = rendered.status
+                    outcome.index_structure = dict(document.fingerprint)
+                    outcome.links_seen = len(document.links)
+                    seen_urls = {url for url, _ in candidates}
+                    candidates += [item for item in found if item[0] not in seen_urls]
+                    logger.info(
+                        "Recuperacao via navegador em %s: %d links relevantes",
+                        spec.id,
+                        len(found),
+                        extra={"source_id": spec.id, "stage": "recovery"},
+                    )
+            elif rendered.error:
+                outcome.error = outcome.error or rendered.error
+
     ordered: list[tuple[str, str]] = []
     seen: set[str] = set()
     for url, label in candidates:
@@ -190,6 +224,10 @@ def collect(
 
     for url, label in ordered[: spec.max_documents]:
         response = fetcher.get(url)
+        if outcome.rendered and not response.ok and browser is not None:
+            # The listing only opened in the browser, so its documents sit behind the
+            # same door: a plain client is refused there too.
+            response = browser.fetch(url)
         if not response.ok or not response.content:
             if response.error or response.status:
                 logger.warning(
