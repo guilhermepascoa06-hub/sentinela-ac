@@ -428,14 +428,14 @@ def upsert_opportunity(
         url=draft.official_edital_url or "",
         document_hash=version.content_hash,
     )
-    created = match is None
     # How much this document may overwrite: source trust, improved when it actually
     # carried a cargo table. Without this a listing page from the same source replaced
     # fields that the opening edital had established.
     has_real_positions = any(not item.synthetic for item in draft.positions)
     authority = source.trust_level * 10 + (0 if has_real_positions else 5)
 
-    if created:
+    created = match is None
+    if match is None:
         opportunity = Opportunity(
             dedup_key=dedup_key(draft),
             institution=draft.institution,
@@ -451,8 +451,10 @@ def upsert_opportunity(
         previous: dict[str, Any] = {}
         previous_positions: list[dict[str, Any]] = []
     else:
-        assert match is not None
-        opportunity = session.get(Opportunity, match.id)  # type: ignore[assignment]
+        existing = session.get(Opportunity, match.id)
+        if existing is None:  # deleted between the lookup and here
+            raise RuntimeError(f"Oportunidade {match.id} desapareceu durante a execução")
+        opportunity = existing
         previous = opportunity_snapshot(opportunity)
         previous_positions = list(previous.get("positions") or [])
 
@@ -851,9 +853,6 @@ def process_source(
     logger: RunLogger,
     llm_provider: Any = None,
 ) -> None:
-    from sentinela.config import Configuration as _Configuration
-
-    assert isinstance(config, _Configuration)
     spec = spec_from_row(source)
     for found in outcome.documents:
         report.documents_discovered += 1

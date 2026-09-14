@@ -156,12 +156,18 @@ class Fetcher:
                 return max(0.0, min(float(retry_after), 60.0))
             except ValueError:
                 pass
-        return min(2.0**attempt, 20.0) + random.uniform(0, 0.75)  # noqa: S311 - jitter only
+        # Jitter only: spreads retries apart, never used for anything secret.
+        return min(2.0**attempt, 20.0) + random.uniform(0, 0.75)  # noqa: S311  # nosec B311
+
+    @property
+    def http(self) -> httpx.Client:
+        if self.client is None:  # __post_init__ always assigns one
+            raise RuntimeError("Fetcher sem cliente HTTP configurado")
+        return self.client
 
     def get(
         self, url: str, *, etag: str | None = None, last_modified: str | None = None
     ) -> Response:
-        assert self.client is not None
         target = canonical_url(url)
         if not target:
             return Response(url, None, b"", "unknown", {}, 0, error="URL nao suportada")
@@ -175,7 +181,7 @@ class Fetcher:
             self._throttle(target)
             started = time.monotonic()
             try:
-                with self.client.stream("GET", target, headers=headers) as stream:
+                with self.http.stream("GET", target, headers=headers) as stream:
                     elapsed = int((time.monotonic() - started) * 1000)
                     if stream.status_code == 304:
                         return Response(
@@ -233,5 +239,5 @@ class Fetcher:
             if not retryable or attempt == self.max_attempts:
                 return response
             self.sleeper(self._backoff(attempt, response.headers.get("retry-after")))
-        assert last is not None
-        return last
+        # Unreachable: the final attempt always returns above. Kept total for the type.
+        return last or Response(target, None, b"", "unknown", {}, 0, error="sem resposta")

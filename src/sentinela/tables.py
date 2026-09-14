@@ -109,7 +109,9 @@ def pdf_tables(content: bytes, max_pages: int = 180) -> list[Table]:
                     break
                 try:
                     finder = page.find_tables()
-                except Exception:  # noqa: BLE001 - table finding is best effort
+                except Exception:  # noqa: BLE001  # nosec B112
+                    # A page whose layout defeats the table finder is skipped; the rest
+                    # of the document still yields its tables.
                     continue
                 for table in finder.tables:
                     rows = tidy_rows(table.extract())

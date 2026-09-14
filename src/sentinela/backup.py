@@ -11,7 +11,7 @@ import gzip
 import json
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404 - binário fixo do PostgreSQL, sem shell
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from datetime import date as dt_date
@@ -79,7 +79,7 @@ def dump(
         path = target / f"{name}.dump.gz"
         environment = dict(os.environ)
         # The password travels in the DSN, never on the command line.
-        process = subprocess.run(  # noqa: S603 - fixed binary, no shell
+        process = subprocess.run(  # noqa: S603  # nosec B603 - binário fixo, lista de args, sem shell
             [
                 binary,
                 "--format=plain",
