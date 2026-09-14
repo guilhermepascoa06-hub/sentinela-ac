@@ -1075,10 +1075,18 @@ def test_a_run_records_how_much_storage_is_left(
     disk filled is precisely the silent death this project exists to prevent."""
     from sentinela.pipeline import run_monitor
 
-    result = run_monitor(session, config, secrets, kind="manual", only=[source.id], dry_run=True)
+    watched = Configuration(
+        notifications=dict(config.notifications),
+        storage={"reports_directory": "reports", "warning_size_mb": 350},
+    )
+    result = run_monitor(session, watched, secrets, kind="manual", only=[source.id], dry_run=True)
     session.commit()
-    # None on SQLite, a number on PostgreSQL: either way the run must not blow up.
-    assert "database_mb" in result.detail or session.get_bind().dialect.name == "sqlite"
+
+    if session.get_bind().dialect.name == "sqlite":
+        # The question has no answer there; the run must simply not blow up.
+        assert "database_mb" not in result.detail
+    else:
+        assert result.detail["database_mb"] > 0
 
 
 def test_a_parser_improvement_reaches_documents_already_stored(
@@ -1131,3 +1139,28 @@ def test_a_parser_improvement_reaches_documents_already_stored(
 
     session.refresh(version)
     assert version.parser_version == PARSER_VERSION, "o documento antigo nao foi reprocessado"
+
+
+def test_changed_metadata_reprocesses_identical_bytes(session: Session, source: Source) -> None:
+    """Regression: metadata_hash was written on every version and never compared. The
+    spec lists changed metadata as its own reprocessing trigger, and it is a real one: a
+    PDF republished under a corrected title is the same bytes in a different document."""
+    report = RunReport(run_id=RUN_ID)
+    body = b"%PDF bytes identicos"
+
+    _, first, changed = persist_document(session, source.id, found(body, title="Edital 01"), report)
+    session.commit()
+    assert changed is True
+
+    _, again, unchanged = persist_document(
+        session, source.id, found(body, title="Edital 01"), report
+    )
+    session.commit()
+    assert unchanged is False, "mesmos bytes e mesmo titulo nao devem reprocessar"
+
+    _, same_row, rechanged = persist_document(
+        session, source.id, found(body, title="Edital 01 (RETIFICADO)"), report
+    )
+    session.commit()
+    assert rechanged is True, "titulo novo sobre os mesmos bytes precisa reinterpretar"
+    assert same_row.id == first.id  # still one version: the content did not change

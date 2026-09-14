@@ -301,6 +301,13 @@ def persist_document(
     if existing is not None:
         existing.downloaded_at = found.fetched_at
         document.current_version_id = existing.id
+        # metadata_hash was written on every version and never compared. The spec lists
+        # changed metadata as its own reprocessing trigger, and it is a real one: a PDF
+        # republished under a corrected title, or re-paginated, has the same bytes in a
+        # different document. Treated as changed so the interpretation is redone.
+        if existing.metadata_hash != metadata_hash:
+            existing.metadata_hash = metadata_hash
+            return document, existing, True
         return document, existing, False
 
     from sentinela.domain import PARSER_VERSION
@@ -1161,6 +1168,13 @@ def _locate_missing_position_fields(
             # be looked at again.
             return {}
         _remember_extraction(session, found, provider, "OK", {"positions": located})
+        # Stamp which semantic version interpreted this document, so the evidence trail
+        # says who read it and not only what was read.
+        session.execute(
+            sa.update(DocumentVersion)
+            .where(DocumentVersion.content_hash == found.content_hash)
+            .values(semantic_version=f"{prompt_version}:{provider.model_version}")
+        )
     if not located:
         return {}
     by_name = {normalize_name(item["name"]): item["fields"] for item in located}
@@ -1547,9 +1561,11 @@ def run_monitor(
 
     limit = float(config.storage.get("warning_size_mb") or 0)
     used = database_size_mb(session.get_bind())
-    if limit and used is not None:
+    if used is not None:
+        # Always recorded. The threshold decides whether to warn, not whether to look:
+        # knowing the trend is what lets anyone see the ceiling coming.
         report.detail["database_mb"] = used
-        if used >= limit:
+        if limit and used >= limit:
             record_event(
                 session,
                 monitor.id,
