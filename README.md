@@ -454,5 +454,6 @@ painel.
 - **Cargos sem tabela no edital** entram como candidatos incompletos e são reprocessados na
   auditoria semanal, nunca descartados.
 
-Documentos relacionados: [ARCHITECTURE.md](ARCHITECTURE.md) · [SOURCES.md](SOURCES.md) ·
+Documentos relacionados: [AGENTS.md](AGENTS.md) — leia primeiro se você vai mexer no
+código · [ARCHITECTURE.md](ARCHITECTURE.md) · [SOURCES.md](SOURCES.md) ·
 [RUNBOOK.md](RUNBOOK.md)
