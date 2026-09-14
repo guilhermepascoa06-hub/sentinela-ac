@@ -63,6 +63,22 @@ def _fail(message: str) -> None:
 
 
 @app.command()
+def dashboard(
+    port: Annotated[int, typer.Option(min=1024, max=65535, help="Porta local do painel.")] = 8765,
+) -> None:
+    """Abre um servidor local de consulta, sem alterar o banco nem enviar alertas."""
+    from sentinela.dashboard import serve
+
+    config, _, engine = _context()
+    console.print(f"Painel: http://127.0.0.1:{port} · Ctrl+C para encerrar.")
+    try:
+        serve(engine, config, port)
+    except OSError:
+        engine.dispose()
+        _fail(f"Não foi possível abrir a porta {port}. Ela pode estar em uso.")
+
+
+@app.command()
 def run(
     only: Annotated[list[str] | None, typer.Option(help="Coletar apenas estas fontes.")] = None,
     kind: Annotated[str, typer.Option(help="daily | backup | manual")] = "daily",

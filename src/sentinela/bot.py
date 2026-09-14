@@ -22,21 +22,33 @@ import httpx
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
-from sentinela.alerts import EMPLOYMENT_LABEL, STATUS_LABEL, day, money, period
+from sentinela.alerts import EMPLOYMENT_LABEL, STATUS_LABEL, _truncate, day, money, period
+from sentinela.bot_queries import (
+    INACTIVE_STATUSES,
+    MAX_REPLY,
+    accepting_candidates,
+    answer_card,
+    answer_history,
+    answer_question,
+    answer_search,
+)
 from sentinela.config import Configuration, Secrets
-from sentinela.domain import now, utc
+from sentinela.domain import normalize, now, utc
+from sentinela.eligibility import effective_status
 from sentinela.logging import get
 from sentinela.models import Deadline, Document, MonitorRun, Opportunity, Position, SourceHealth
 
 logger = get("bot")
 API = "https://api.telegram.org"
-MAX_REPLY = 3_900
 MAX_QUESTION_CHARS = 500
 POLL_TIMEOUT = 25
 
 AJUDA = """Sentinela AC — o que eu respondo
 
 /vagas     o que combina com o seu filtro agora
+/buscar TERMO     busca todos os cargos por nome ou órgão
+/cargo NOME ou CÓDIGO     ficha, requisitos e evidência
+/historico NOME ou CÓDIGO     mudanças oficiais registradas
 /prazos    o que vence nos próximos dias
 /status    se o monitoramento está vivo
 /fontes    quais portais estão com problema
@@ -45,6 +57,9 @@ AJUDA = """Sentinela AC — o que eu respondo
 Pode perguntar em texto normal também, por exemplo:
 "qual o salário do agente legislativo?"
 "quando é a prova?"
+
+As consultas de cargo funcionam sem IA. Use /buscar TERMO --pagina 2 para continuar
+uma lista. Cargos fora do filtro e inscrições encerradas aparecem identificados.
 
 Só respondo com o que está registrado no banco, a partir de documento oficial
 coletado. Quando não sei, eu digo que não sei."""
@@ -62,21 +77,24 @@ class BotResult:
 # ---------------------------------------------------------------- data for answers
 
 
-def eligible_rows(session: Session) -> list[tuple[Opportunity, Position]]:
+def eligible_rows(
+    session: Session, config: Configuration | None = None
+) -> list[tuple[Opportunity, Position]]:
     rows = session.execute(
         sa.select(Opportunity, Position)
         .join(Position, Position.opportunity_id == Opportunity.id)
         .where(
             Position.eligible.is_(True),
-            Opportunity.status.notin_(["CANCELLED", "EXPIRED"]),
+            Opportunity.status.notin_(INACTIVE_STATUSES),
         )
         .order_by(Position.score.desc())
     ).all()
-    return [(row[0], row[1]) for row in rows]
+    today = now().astimezone((config or Configuration()).zone).date()
+    return [(row[0], row[1]) for row in rows if accepting_candidates(row[0], today)]
 
 
 def answer_vagas(session: Session, config: Configuration) -> str:
-    rows = eligible_rows(session)
+    rows = eligible_rows(session, config)
     if not rows:
         return (
             "Nenhuma vaga compatível com o seu filtro agora.\n\n"
@@ -91,11 +109,12 @@ def answer_vagas(session: Session, config: Configuration) -> str:
             else "CH não confirmada"
         )
         parts += [
-            f"• {position.name}",
+            f"• {position.name} · #{position.id[:8]}",
             f"  {opportunity.institution}",
             f"  {workload} · {money(position.salary)}"
             + (f" · {position.benefits}" if position.benefits else ""),
             f"  Inscrições: {period(opportunity.registration_start, opportunity.registration_deadline)}",
+            f"  {STATUS_LABEL.get(effective_status(opportunity, now().astimezone(config.zone).date()), opportunity.status)}",
             f"  Prova: {day(opportunity.exam_date)}",
             f"  {EMPLOYMENT_LABEL.get(opportunity.employment_type, 'vínculo não confirmado')}"
             + (f" · {opportunity.employment_regime}" if opportunity.employment_regime else ""),
@@ -103,6 +122,9 @@ def answer_vagas(session: Session, config: Configuration) -> str:
             f"  {opportunity.official_edital_url or opportunity.official_institution_url or ''}",
             "",
         ]
+    if len(rows) > 8:
+        parts.append("Mostrando os primeiros 8. Use /buscar para ver e paginar todos os cargos.")
+    parts.append("Ficha e requisitos: /cargo CÓDIGO")
     return "\n".join(parts).strip()
 
 
@@ -116,6 +138,7 @@ def answer_prazos(session: Session, config: Configuration) -> str:
             Deadline.due_date >= today,
             Deadline.due_date <= today + timedelta(days=45),
             Opportunity.eligible.is_(True),
+            Opportunity.status.notin_(INACTIVE_STATUSES),
         )
         .order_by(Deadline.due_date)
     ).all()
@@ -163,10 +186,11 @@ def answer_status(session: Session, config: Configuration) -> str:
             f"Última coleta: {quando}",
             f"Fontes: {saude.get('HEALTHY', 0)} saudáveis, "
             f"{saude.get('DEGRADED', 0)} degradadas, {saude.get('OPEN', 0)} fora do ar",
-            f"Vagas compatíveis agora: {len(eligible_rows(session))}",
+            f"Vagas compatíveis agora: {len(eligible_rows(session, config))}",
             f"Documentos na fila de revisão: {revisao}",
             "",
-            "Próxima coleta: 07:17 (horário de Rio Branco).",
+            f"Coletas programadas: {config.monitoring.primary_local_time} e "
+            f"{config.monitoring.backup_local_time} (reserva), horário de Rio Branco.",
         ]
     )
 
@@ -209,7 +233,7 @@ COMMANDS = {
 def context_for_model(session: Session, config: Configuration) -> str:
     """A compact, factual briefing. The model may use nothing outside it."""
     lines: list[str] = []
-    for opportunity, position in eligible_rows(session)[:10]:
+    for opportunity, position in eligible_rows(session, config)[:10]:
         # Already formatted the Brazilian way. Handing the model raw DB values made it
         # answer "R$ 4656.75" and "2026-11-22" back to a person.
         horas = (
@@ -221,17 +245,17 @@ def context_for_model(session: Session, config: Configuration) -> str:
             f"- cargo={position.name} | orgao={opportunity.institution} | "
             f"escolaridade={position.education} | "
             f"carga_horaria={horas} | "
-            f"salario={money(position.salary) if position.salary else 'nao informado'} | "
+            f"salario={money(position.salary)} | "
             f"beneficios={position.benefits or 'nao informados'} | "
             f"vagas={position.vacancies if position.vacancies is not None else 'nao informado'} | "
             f"lotacao={position.assignment_location or 'nao confirmada'} | "
             f"inscricoes={period(opportunity.registration_start, opportunity.registration_deadline)} | "
             f"prova={day(opportunity.exam_date)} | "
-            f"taxa={money(opportunity.application_fee) if opportunity.application_fee else 'nao informada'} | "
+            f"taxa={money(opportunity.application_fee)} | "
             f"isencao={opportunity.fee_exemption or 'nao informada'} | "
             f"banca={opportunity.organizing_board or 'nao informada'} | "
             f"regime={opportunity.employment_regime or 'nao informado'} | "
-            f"situacao={STATUS_LABEL.get(opportunity.status, opportunity.status)} | "
+            f"situacao={STATUS_LABEL.get(effective_status(opportunity, now().astimezone(config.zone).date()), opportunity.status)} | "
             f"edital={opportunity.official_edital_url or ''}"
         )
     return "\n".join(lines) or "(nenhuma vaga compativel registrada)"
@@ -299,9 +323,35 @@ def route(session: Session, config: Configuration, secrets: Secrets, text: str) 
     command = text.strip().split()[0].lower().split("@")[0] if text.strip() else ""
     if command in ("/start", "/ajuda", "/help"):
         return AJUDA
+    query_handlers = {"/buscar": answer_search, "/cargo": answer_card, "/historico": answer_history}
+    if command in query_handlers:
+        argument = text.strip().split(maxsplit=1)
+        return _truncate(
+            query_handlers[command](session, config, argument[1] if len(argument) > 1 else ""),
+            MAX_REPLY,
+        )
     handler = COMMANDS.get(command)
     if handler is not None:
-        return handler(session, config)[:MAX_REPLY]
+        return _truncate(handler(session, config), MAX_REPLY)
+    if command.startswith("/"):
+        return "Comando não reconhecido. Use /ajuda para ver as consultas disponíveis."
+    natural = normalize(text)
+    shortcuts = {
+        "oi": "/ajuda",
+        "ola": "/ajuda",
+        "ajuda": "/ajuda",
+        "vagas": "/vagas",
+        "quais vagas": "/vagas",
+        "quais as vagas": "/vagas",
+        "prazos": "/prazos",
+        "quais os prazos": "/prazos",
+        "status": "/status",
+    }
+    if natural in shortcuts:
+        return route(session, config, secrets, shortcuts[natural])
+    factual = answer_question(session, config, text[:MAX_QUESTION_CHARS])
+    if factual is not None:
+        return _truncate(factual, MAX_REPLY)
     return answer_free_text(session, config, secrets, text)
 
 
