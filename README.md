@@ -24,7 +24,6 @@ palpite.
   - [GitHub](#github)
   - [Segredos necessários](#segredos-necessários)
 - [Rodando manualmente](#rodando-manualmente)
-- [Painel local](#painel-local)
 - [Perguntas no Telegram](#perguntas-no-telegram)
 - [Agendamento automático](#agendamento-automático)
 - [Testes](#testes)
@@ -261,38 +260,8 @@ sentinela test-notification
 sentinela watchdog
 sentinela backup
 sentinela schedule                 # horários convertidos para UTC
-sentinela dashboard --port 8765    # painel local de consulta
 sentinela bot --watch              # responde no Telegram em segundos
 ```
-
----
-
-## Painel local
-
-Uma leitura só, no seu computador. O painel abre o que já está no banco — cargos, ficha
-completa com a evidência de cada campo, histórico oficial, agenda e saúde das fontes. Ele
-**não coleta, não chama modelo e não envia notificação**.
-
-```powershell
-.\abrir-painel.bat                  # dois cliques: sobe o painel e abre o navegador
-sentinela dashboard --port 8765     # o mesmo, com o terminal à vista
-```
-
-| Onde | O que responde |
-|---|---|
-| Oportunidades | o que combina com o filtro, o que está em revisão e tudo que foi encontrado |
-| Minha lista | os cargos que você marcou, com status pessoal e anotações |
-| Agenda | prazos por mês, com exportação `.ics` para o calendário |
-| Fontes e monitoramento | de onde veio cada dado e qual portal está falhando |
-
-A ficha de cada cargo traz o trecho oficial que sustenta cada campo, com a página do PDF e
-o link do documento, além das alterações já registradas para o certame.
-
-O servidor escuta **apenas em `127.0.0.1`**, confere `Host` e `Origin` a cada requisição e
-recusa qualquer origem externa; no PostgreSQL a transação é aberta como `READ ONLY`. Sua
-lista e suas anotações ficam **só no navegador** (`localStorage`), nunca no banco: elas são
-a sua decisão, não um fato oficial. Use *Exportar backup* antes de trocar de navegador ou
-limpar os dados do site.
 
 ---
 

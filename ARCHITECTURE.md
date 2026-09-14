@@ -163,6 +163,6 @@ nunca é interpretado como boa notícia.
 
 ## Extensão futura
 
-O domínio não conhece a camada de apresentação, então um dashboard web lê o mesmo banco sem
+O domínio não conhece a camada de apresentação, então outra interface lê o mesmo banco sem
 tocar no pipeline. Adicionar canal de notificação é implementar o protocolo `Notifier`.
 Adicionar fonte é uma entrada em YAML.

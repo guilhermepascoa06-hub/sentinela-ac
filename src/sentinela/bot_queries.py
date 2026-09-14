@@ -243,7 +243,7 @@ def answer_card(session: Session, config: Configuration, term: str) -> str:
         if _units("\n".join([*tail, label, link])) <= MAX_REPLY // 2:
             tail += [label, link]
         else:
-            tail.append(f"{label} endereço registrado longo demais para o Telegram; abra o painel.")
+            tail.append(f"{label} endereço longo demais para o Telegram; veja no edital.")
     tail += ["", f"Alterações: /historico {position.id[:8]}"]
     return _fit(lines, tail, omitted=short.omitted)
 
