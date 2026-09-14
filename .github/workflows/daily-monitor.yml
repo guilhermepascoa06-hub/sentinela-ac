@@ -61,22 +61,35 @@ jobs:
         run: alembic upgrade head
       - name: Executar monitoramento
         id: run
+        env:
+          # Entradas do usuário chegam por variável de ambiente, nunca interpoladas
+          # direto no shell: `${{ }}` dentro de `run` é vetor de injeção de script.
+          SCHEDULE: ${{ github.event.schedule }}
+          ONLY_INPUT: ${{ inputs.only }}
+          FORCE_INPUT: ${{ inputs.force }}
         run: |
           EXTRA=""
           # A execução das 13:17 UTC é a redundante.
-          if [ "${{ github.event.schedule }}" = "17 13 * * *" ]; then
+          if [ "$SCHEDULE" = "17 13 * * *" ] && [ "$FORCE_INPUT" != "true" ]; then
             EXTRA="--skip-if-fresh --kind backup"
           fi
-          if [ "${{ inputs.force }}" = "true" ]; then EXTRA=""; fi
           ONLY=""
-          for s in $(echo "${{ inputs.only }}" | tr ',' ' '); do ONLY="$ONLY --only $s"; done
+          for fonte in $(printf '%s' "$ONLY_INPUT" | tr ',' ' '); do
+            case "$fonte" in
+              *[!a-zA-Z0-9-]*) echo "::error::id de fonte inválido: $fonte"; exit 1 ;;
+              "") ;;
+              *) ONLY="$ONLY --only $fonte" ;;
+            esac
+          done
           sentinela run --trigger "github-actions" $EXTRA $ONLY
       - name: Watchdog
         if: always()
         run: sentinela watchdog
       - name: Abrir issues para fontes degradadas
+        # Só a abertura de issue. A auditoria profunda é semanal de propósito: ela
+        # revalida todas as fontes e custaria uma hora de runner por dia.
         if: always()
-        run: sentinela deep-audit --no-open-issues || true
+        run: sentinela issues
         continue-on-error: true
       - name: Publicar relatório
         if: always()

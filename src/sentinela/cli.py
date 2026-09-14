@@ -461,6 +461,27 @@ def deep_audit(
 
 
 @app.command()
+def issues() -> None:
+    """Abre issue no GitHub para cada fonte degradada sem issue aberta."""
+    config, secrets, engine = _context()
+    with session_scope(session_factory(engine)) as session:
+        sync(session, load_registry())
+        created = audit_module.report_degraded_sources(session, config, secrets)
+    if not (secrets.github_repository and secrets.github_token.get_secret_value()):
+        # Say so plainly: "0 issues" would read as "nada quebrado", which is not the same
+        # thing as "não consegui nem tentar".
+        console.print(
+            "[yellow]Sem GITHUB_TOKEN/GITHUB_REPOSITORY: nenhuma issue foi verificada "
+            "nem aberta. Dentro do GitHub Actions os dois existem automaticamente.[/yellow]"
+        )
+        return
+    console.print(
+        f"[green]{len(created)} issue(s) aberta(s): "
+        f"{', '.join(f'#{number}' for number in created) or 'nenhuma nova'}[/green]"
+    )
+
+
+@app.command()
 def retry(
     limit: Annotated[int, typer.Option(help="Máximo de documentos a reprocessar.")] = 40,
 ) -> None:
