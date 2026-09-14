@@ -41,7 +41,11 @@ storage:
   warning_size_mb: 350
   reports_directory: reports
 llm:
+  # Desligado: o sistema extrai tudo de forma determinística sem ele. Ligar é opcional e
+  # só amplia a cobertura em editais escritos em prosa, sem tabela de cargos.
   enabled: false
   prompt_version: edital_extraction_v1
-  model: ''
-  model_version: ''
+  # Gemini free tier. O endpoint compatível com OpenAI é resolvido automaticamente a
+  # partir do prefixo "gemini", então basta a chave em LLM_API_KEY.
+  model: gemini-2.5-flash
+  model_version: gemini-2.5-flash

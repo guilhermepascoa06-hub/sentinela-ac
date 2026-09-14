@@ -100,8 +100,27 @@ sources.yaml  ──►  Registry  ──►  Coletor  ──►  Fetcher (retry
 Detalhes de cada estágio em [ARCHITECTURE.md](ARCHITECTURE.md).
 
 **IA é opcional e está desligada.** Toda a extração que o sistema faz hoje é determinística.
-O LLM só entra como último recurso para preencher campos que o parser não achou, jamais para
-decidir elegibilidade, e o sistema funciona por completo sem ele.
+O sistema funciona por completo sem ela.
+
+Quando ligada, o modelo é usado como **localizador, nunca como autoridade**. Um edital de 56
+páginas pode declarar a carga horária uma única vez, em prosa, numa frase que nenhum parser
+de tabela vai encontrar. Pedir ao modelo que aponte essa frase é útil; acreditar no que ele
+diz sobre ela, não. Então:
+
+1. ele devolve um **trecho que afirma estar literalmente no documento**;
+2. o trecho é conferido por comparação de texto — não por confiança;
+3. o **parser determinístico relê o trecho** e extrai o valor por conta própria;
+4. só entra no sistema se o parser concordar.
+
+Trecho inventado morre no passo 2. Trecho real que não sustenta a afirmação morre no passo 3.
+O que sobrevive é um valor lido por código determinístico, tendo o modelo feito apenas o
+trabalho de dizer onde olhar. A evidência guardada registra isso: o método fica
+`llm_located+parser_verified`, com confiança abaixo de uma leitura de tabela.
+
+Para ligar: crie uma chave gratuita em [aistudio.google.com/apikey](https://aistudio.google.com/apikey),
+exporte `LLM_API_KEY` e mude `llm.enabled` para `true` em `config.yaml`. O endpoint do Gemini
+é resolvido sozinho pelo prefixo do modelo. **Nada é cobrado no nível gratuito**, e o cache por
+hash de documento impede que o mesmo edital custe duas vezes.
 
 ---
 

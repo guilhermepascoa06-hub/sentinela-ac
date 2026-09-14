@@ -910,6 +910,20 @@ def process_source(
                 continue
             if llm_provider is not None:
                 _semantic(session, draft, found, config, llm_provider, run_id)
+                verified = _locate_missing_position_fields(
+                    session, draft, found, config, llm_provider
+                )
+                if verified.get("confirmed"):
+                    record_event(
+                        session,
+                        run_id,
+                        kind="LLM_VERIFIED",
+                        message=(
+                            f"{verified['confirmed']} campo(s) localizados pelo modelo e "
+                            f"confirmados pelo parser em {found.url[:120]}"
+                        ),
+                        context=verified,
+                    )
             opportunity, changes, created = upsert_opportunity(
                 session,
                 draft,
@@ -953,6 +967,78 @@ def process_source(
                 context={"url": found.url},
             )
             session.flush()
+
+
+def _locate_missing_position_fields(
+    session: Session,
+    draft: OpportunityDraft,
+    found: FoundDocument,
+    config: Configuration,
+    provider: Any,
+) -> dict[str, int]:
+    """Ask the model to point at the sentences the table parser never saw.
+
+    Only runs when a cargo that is otherwise interesting still lacks a field the user
+    filters on. Nothing the model says is believed: every claim goes through verify(),
+    which requires the quote to exist in the document and the deterministic parser to
+    re-derive the same value.
+    """
+    from sentinela.llm import load_prompt, parse_located
+    from sentinela.verify import VERIFIERS, apply_to_position, summarize
+
+    gaps = [
+        item
+        for item in draft.positions
+        if not item.synthetic and any(getattr(item, name, None) is None for name in VERIFIERS)
+    ]
+    if not gaps:
+        return {}
+    prompt_version = "edital_locate_v1"
+    cached = session.execute(
+        sa.select(ExtractionResult).where(
+            ExtractionResult.document_hash == found.content_hash,
+            ExtractionResult.prompt_version == prompt_version,
+            ExtractionResult.model == provider.model,
+            ExtractionResult.model_version == provider.model_version,
+        )
+    ).scalar_one_or_none()
+    if cached is not None:
+        located = list(cached.payload.get("positions") or [])
+    else:
+        try:
+            raw = provider.complete(load_prompt(prompt_version), found.document.text)
+            located = parse_located(raw)
+            status = "OK"
+        except Exception as error:  # noqa: BLE001 - provider outage must not fail the run
+            located, status = [], type(error).__name__
+        session.add(
+            ExtractionResult(
+                document_hash=found.content_hash,
+                prompt_version=prompt_version,
+                model=provider.model,
+                model_version=provider.model_version,
+                status=status,
+                payload={"positions": located},
+                created_at=now(),
+            )
+        )
+    if not located:
+        return {}
+    by_name = {normalize_name(item["name"]): item["fields"] for item in located}
+    results = []
+    for position in gaps:
+        claims = by_name.get(normalize_name(position.name))
+        if claims:
+            results += apply_to_position(
+                position, claims, found.document.text, found.url, prompt_version
+            )
+    return summarize(results)
+
+
+def normalize_name(value: str) -> str:
+    from sentinela.domain import normalize
+
+    return normalize(value)
 
 
 def _semantic(

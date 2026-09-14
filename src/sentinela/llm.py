@@ -127,12 +127,17 @@ def load_prompt(version: str, directory: Path = PROMPT_DIR) -> str:
     return path.read_text(encoding="utf-8")
 
 
+# Google exposes Gemini through an OpenAI-compatible endpoint, so the free tier needs no
+# vendor SDK and no separate code path: only a base URL and a key.
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+
+
 def build_provider(config: Configuration, secrets: Secrets) -> LLMProvider:
     if not config.llm.get("enabled"):
         return NullProvider()
-    base_url = secrets.llm_base_url or ""
     api_key = secrets.llm_api_key.get_secret_value()
     model = str(config.llm.get("model") or "")
+    base_url = secrets.llm_base_url or (GEMINI_BASE_URL if model.startswith("gemini") else "")
     if not (base_url and api_key and model):
         return NullProvider()
     return OpenAICompatibleProvider(
@@ -183,6 +188,41 @@ def parse_payload(raw: str) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
     raw_positions = raw_positions if isinstance(raw_positions, list) else []
     positions = [entry for entry in raw_positions if isinstance(entry, dict)][:60]
     return fields, positions, ""
+
+
+def parse_located(raw: str) -> list[dict[str, Any]]:
+    """Read a locator reply. Every claim must carry a quote or it is dropped here."""
+    try:
+        body = json.loads(raw)
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(body, dict):
+        return []
+    entries = body.get("positions")
+    if not isinstance(entries, list):
+        return []
+    found: list[dict[str, Any]] = []
+    for entry in entries[:60]:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name") or "").strip()
+        raw_fields = entry.get("fields")
+        if not name or not isinstance(raw_fields, dict):
+            continue
+        claims: dict[str, Any] = {}
+        for name_of_field, claim in raw_fields.items():
+            if not isinstance(claim, dict):
+                continue
+            evidence = str(claim.get("raw_evidence") or "")
+            if len(evidence) < 25:
+                continue  # unquotable claims never reach the verifier
+            claims[name_of_field] = {
+                "value": claim.get("value"),
+                "raw_evidence": evidence[:400],
+            }
+        if claims:
+            found.append({"name": name, "fields": claims})
+    return found
 
 
 def extract_semantic(
