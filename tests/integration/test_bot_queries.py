@@ -279,7 +279,9 @@ def test_missing_history_is_explicit(session: Session, config: Configuration) ->
 def test_long_card_respects_telegram_utf16_limit(session: Session, config: Configuration) -> None:
     opportunity, position = cargo(session)
     position.requirements = "🧭" * 10000
-    opportunity.official_application_url = "https://example.test/" + "a" * 2000
+    # The column caps the address at 1024 characters. PostgreSQL enforces it and SQLite
+    # does not: a fixture over the bound passed locally and broke the CI.
+    opportunity.official_application_url = "https://example.test/" + "a" * 1000
     text = ask(session, config, f"/cargo {position.id[:8]}")
     assert len(text.encode("utf-16-le")) // 2 <= bot.MAX_REPLY
     assert "[mensagem truncada]" in text
