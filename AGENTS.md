@@ -38,11 +38,12 @@ CONFIABILIDADE → PRECISÃO → INTEGRIDADE → OBSERVABILIDADE
 |---|---|
 | Repositório | `guilhermepascoa06-hub/sentinela-ac` — **público**, branch `main` |
 | Banco | Supabase, **session pooler** `aws-0-sa-east-1.pooler.supabase.com:5432` |
-| Testes | 272, verdes no SQLite **e** no PostgreSQL |
+| Testes | 337, verdes no SQLite; o PostgreSQL é exercitado pelo CI a cada push |
 | Qualidade | ruff, ruff format, mypy e bandit limpos |
 | Fontes | 33 confiáveis + 1 candidata · 28 saudáveis, 1 degradada, 5 circuito aberto |
 | Dados | 124 documentos · 18 oportunidades · 34 cargos · 181 versões |
 | Custo | **R$ 0/mês**, sem teto (repo público = Actions ilimitado) |
+| Consulta | painel local (`abrir-painel.bat`) + consultas determinísticas no bot |
 
 **Resultado real:** 2 cargos compatíveis — Agente Legislativo e Tradutor Intérprete, Câmara
 Municipal de Rio Branco, 30h, R$ 4.656,75, inscrições até 13/10/2026. Conferidos campo a
@@ -87,7 +88,9 @@ health.py      saúde da fonte, circuit breaker, detecção de mudança de layou
 pipeline.py    orquestra tudo. É o arquivo mais denso — leia antes de mexer
 alerts.py      texto das mensagens + chave de idempotência
 notifications.py  canais (Telegram, e-mail, markdown, console)
-bot.py         Telegram de duas vias: responde perguntas
+bot.py         Telegram de duas vias: roteia comandos e perguntas
+bot_queries.py busca, ficha e histórico determinísticos — respondem sem IA
+dashboard.py   painel local somente-leitura em 127.0.0.1 + web/ (HTML, CSS, JS)
 watchdog.py    monitora o próprio monitoramento
 audit.py       auditoria semanal + issues automáticas no GitHub
 report.py      reports/latest.md
@@ -160,6 +163,22 @@ Cada linha aqui custou um bug real em produção. Há teste travando todas.
 23. **Repositório é público.** Nunca commitar `.env`, chat_id real, e-mail pessoal ou a ref
     do projeto Supabase. O histórico foi reescrito uma vez para remover chat_id e e-mail.
 
+### Apresentação
+
+24. **Nenhum código sai para quem lê.** `high_school`, `GOOD`, `REGISTRATION_OPEN` e
+    `HIGH SCHOOL ONLY` são chaves internas. Painel, card do bot, alerta e diff traduzem
+    pelos mapas de `alerts.py` (`STATUS_LABEL`, `EMPLOYMENT_LABEL`, `EDUCATION_LABEL`,
+    `WORKLOAD_LABEL`, `QUALIFICATION_LABEL`). Código desconhecido aparece como está —
+    traduzir por adivinhação seria inventar. `raw_old`/`raw_new` do diff continuam com o
+    código, porque é o que o escritor compara.
+25. **Releitura sem mudança não é histórico.** Versões com `changes` vazio provam que o
+    monitor está vivo, mas se entram na lista enterram a alteração que importa: são
+    **contadas e declaradas**, nunca listadas — no painel e no bot.
+26. **Texto cortado é declarado.** O card do Telegram reserva evidência e link no fim (uma
+    URL cortada é um link errado, não um link menor) e marca `[mensagem truncada]` quando
+    qualquer campo foi encurtado. O painel corta campos gigantes na lista e diz que o texto
+    completo está na ficha.
+
 ---
 
 ## 5. Armadilhas técnicas conhecidas
@@ -174,6 +193,11 @@ Cada linha aqui custou um bug real em produção. Há teste travando todas.
 - `gemini-2.5-flash` foi descontinuado para contas novas. Está em `gemini-3.5-flash`, com
   queda automática para os *lite* quando a cota estoura (429 não se resolve esperando).
 - O GitHub cobra **minuto arredondado para cima** por execução.
+- `bot_queries.py` não pode importar `bot.py` (o caminho é o contrário). `MAX_REPLY`
+  mora em `bot_queries` e `bot` o reexporta: há uma definição só.
+- O painel é servido de `src/sentinela/web/`. A fonte vem junto no repositório porque a
+  CSP dele é `'self'` para tudo: nada carrega de CDN, e um arquivo declarado e não
+  enviado vira 404 em toda visita (há teste travando isso).
 - A CLI importa `pipeline` de forma **tardia**. Não mova para o topo: isso arrastaria
   bs4/pymupdf/playwright para o job do bot, que só lê o banco. Há teste bloqueando.
 
@@ -231,6 +255,7 @@ sentinela run [--only ID] [--force] [--dry-run] [--skip-if-fresh]
 sentinela report | opportunities | deadlines | sources | source-check ID
 sentinela doctor | watchdog | deep-audit | issues | retry | backup | schedule
 sentinela bot [--watch]        # --watch responde em segundos, sem gastar Actions
+sentinela dashboard [--port 8765]   # painel local; abrir-painel.bat faz o mesmo
 sentinela test-notification
 ```
 
@@ -251,7 +276,10 @@ sentinela test-notification
    inofensiva; remover exigiria migration.
 4. **Cobertura de Rio Branco depende de poucos portais.** O caminho de maior valor é
    acrescentar fontes municipais e estaduais em `sources.yaml` — é uma entrada de YAML.
-5. **`raw_snapshots` e `opportunity_versions` crescem para sempre.** 17 MB de 500 hoje, com
+5. **Os `reasons` já gravados ainda trazem `Carga horária: GOOD`.** O texto passou a ser
+   traduzido em `eligibility.py`, mas as linhas antigas só se corrigem quando o cargo é
+   reavaliado pela próxima coleta. Não vale migration.
+6. **`raw_snapshots` e `opportunity_versions` crescem para sempre.** 17 MB de 500 hoje, com
    aviso configurado em 350. Anos de folga, mas não há poda.
 
 ---
