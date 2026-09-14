@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from datetime import timedelta
 from pathlib import Path
 from typing import Annotated, Any
@@ -561,6 +562,9 @@ def bot(
         bool, typer.Option(help="Ficar escutando (resposta imediata). Ctrl+C encerra.")
     ] = False,
     rounds: Annotated[int, typer.Option(help="Ciclos no modo escuta. 0 = sem limite.")] = 0,
+    minutes: Annotated[
+        float, typer.Option(help="Minutos de escuta antes de encerrar. 0 = sem limite.")
+    ] = 0,
 ) -> None:
     """Responde as mensagens que chegaram no Telegram."""
     from sentinela.bot import poll_once
@@ -589,8 +593,12 @@ def bot(
 
     console.print("[green]Escutando o Telegram. Ctrl+C encerra.[/green]")
     volta = 0
+    # Um job na nuvem precisa terminar sozinho para o proximo turno assumir. O
+    # Telegram guarda o que nao foi confirmado por 24h, entao um intervalo entre
+    # turnos atrasa a resposta, nunca perde a mensagem.
+    limite = time.monotonic() + minutes * 60 if minutes > 0 else None
     try:
-        while rounds == 0 or volta < rounds:
+        while (rounds == 0 or volta < rounds) and (limite is None or time.monotonic() < limite):
             # Long polling: a resposta sai em segundos, sem ficar batendo na API.
             ciclo(25)
             volta += 1
