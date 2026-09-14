@@ -268,6 +268,7 @@ sentinela schedule                 # horários convertidos para UTC
 | Workflow | Quando | O quê |
 |---|---|---|
 | `daily-monitor.yml` | 07:17 e 08:17 (Rio Branco) | coleta; a segunda só assume se a primeira faltou ou falhou |
+| `telegram-bot.yml` | de hora em hora | responde as mensagens que você mandou no Telegram |
 | `weekly-deep-audit.yml` | domingo 06:43 | revalida fontes, reprocessa pendências, descobre fontes novas |
 | `database-backup.yml` | 03:07 | backup + verificação + teste de restauração |
 | `ci.yml` | push e PR | lint, tipos, migrations, testes, checagem de segredos |
@@ -402,13 +403,30 @@ redigidas antes de qualquer linha ser escrita.
 
 ## Custos
 
-| Item | Custo |
-|---|---|
-| Supabase Free (500 MB) | **R$ 0** |
-| GitHub Actions | **R$ 0** (~300 de 2.000 min/mês) |
-| Telegram Bot API | **R$ 0** |
-| LLM | **R$ 0** — desligado por padrão |
-| **Total** | **R$ 0/mês** |
+| Item | Custo | Consumo |
+|---|---|---|
+| Supabase Free | **R$ 0** | 17 MB de 500 |
+| GitHub Actions | **R$ 0** | ~1.224 de 2.000 min/mês |
+| Telegram Bot API | **R$ 0** | sem limite prático |
+| Gemini free tier | **R$ 0** | poucas chamadas/dia, com cache |
+| **Total** | **R$ 0/mês** | |
+
+O único recurso com folga apertada são os minutos do Actions, e o motivo é o bot do
+Telegram: o GitHub **arredona para cima por execução**, então cada checagem custa 1 minuto
+inteiro mesmo levando 45 segundos.
+
+```
+a cada 30 min   1.440/mês + 504 dos outros = 1.944 de 2.000   sem folga para o CI
+de hora em hora   720/mês + 504 dos outros = 1.224 de 2.000   com folga
+```
+
+Por isso o padrão é de hora em hora. Duas formas de ter resposta imediata sem pagar nada:
+
+- `sentinela bot --watch` na sua máquina faz long polling e responde em segundos, sem
+  gastar minuto nenhum do Actions;
+- tornar o repositório **público** dá minutos **ilimitados**. Nada sensível vive aqui — os
+  segredos estão em GitHub Secrets e o `.env` nunca entra no Git — mas essa é uma decisão
+  sua, porque o código passa a ser visível para qualquer pessoa.
 
 Projeto Supabase gratuito **pausa após 7 dias sem atividade**. As execuções diárias contam
 como atividade, então na prática ele não pausa. Se ficar semanas parado, é só despausar no

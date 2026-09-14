@@ -42,6 +42,10 @@ FILLABLE = frozenset(
 MAX_INPUT_CHARS = 24_000
 # A free tier says "not now" far more often than it says "no".
 TRANSIENT_STATUS = frozenset({429, 500, 502, 503, 504, 529})
+# 429 here means the daily quota is spent, not that the request was too fast: waiting
+# does not help, but a lighter model has its own quota and answers the same questions.
+QUOTA_STATUS = frozenset({429, 404})
+FALLBACK_MODELS = ("gemini-3.5-flash-lite", "gemini-flash-lite-latest")
 
 
 def _retry_delay(response: Any, attempt: int) -> float:
@@ -75,7 +79,7 @@ class LLMProvider(Protocol):
     model: str
     model_version: str
 
-    def complete(self, prompt: str, document: str) -> str: ...
+    def complete(self, prompt: str, document: str, json_mode: bool = True) -> str: ...
 
 
 class NullProvider:
@@ -85,7 +89,7 @@ class NullProvider:
     model = ""
     model_version = ""
 
-    def complete(self, prompt: str, document: str) -> str:
+    def complete(self, prompt: str, document: str, json_mode: bool = True) -> str:
         raise RuntimeError("LLM desabilitado")
 
 
@@ -104,6 +108,7 @@ class OpenAICompatibleProvider:
         timeout: float = 90.0,
         max_attempts: int = 3,
         sleeper: Any = time.sleep,
+        fallback_models: tuple[str, ...] = FALLBACK_MODELS,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
@@ -113,50 +118,61 @@ class OpenAICompatibleProvider:
         self._timeout = timeout
         self.max_attempts = max_attempts
         self.sleeper = sleeper
+        self.fallback_models = fallback_models
 
-    def complete(self, prompt: str, document: str) -> str:
+    def complete(self, prompt: str, document: str, json_mode: bool = True) -> str:
         """Ask once, retrying only the answers that mean "not now".
 
         A free tier answers 503 and 429 routinely under load. Giving up on the first one
         would throw away the whole step for a condition that clears in seconds.
+
+        `json_mode` is right for extraction, where the reply is parsed. It is wrong for
+        chat, where the reply is read by a person: forcing it there delivers a raw JSON
+        object into the conversation.
         """
         owned = self._client is None
         client = self._client or httpx.Client(timeout=self._timeout)
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.model,
             "temperature": 0,
-            "response_format": {"type": "json_object"},
             "messages": [
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": document[:MAX_INPUT_CHARS]},
             ],
         }
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+        candidates = [self.model] + [name for name in self.fallback_models if name != self.model]
         try:
             last: Exception | None = None
-            for attempt in range(1, self.max_attempts + 1):
-                try:
-                    response = client.post(
-                        f"{self.base_url}/chat/completions",
-                        headers={"Authorization": f"Bearer {self._key}"},
-                        json=payload,
-                    )
-                except httpx.HTTPError as error:
-                    last = error
-                    response = None
-                if response is not None:
-                    if response.status_code not in TRANSIENT_STATUS:
-                        response.raise_for_status()
-                        body = response.json()
-                        return str(body["choices"][0]["message"]["content"])
-                    last = httpx.HTTPStatusError(
-                        f"HTTP {response.status_code}",
-                        request=response.request,
-                        response=response,
-                    )
-                if attempt == self.max_attempts:
-                    break
-                delay = _retry_delay(response, attempt)
-                self.sleeper(delay)
+            for model in candidates:
+                payload["model"] = model
+                for attempt in range(1, self.max_attempts + 1):
+                    try:
+                        response = client.post(
+                            f"{self.base_url}/chat/completions",
+                            headers={"Authorization": f"Bearer {self._key}"},
+                            json=payload,
+                        )
+                    except httpx.HTTPError as error:
+                        last = error
+                        response = None
+                    if response is not None:
+                        if response.status_code not in TRANSIENT_STATUS:
+                            response.raise_for_status()
+                            body = response.json()
+                            return str(body["choices"][0]["message"]["content"])
+                        last = httpx.HTTPStatusError(
+                            f"HTTP {response.status_code}",
+                            request=response.request,
+                            response=response,
+                        )
+                        if response.status_code in QUOTA_STATUS:
+                            # Waiting will not refill a spent quota. Change model instead.
+                            break
+                    if attempt == self.max_attempts:
+                        break
+                    self.sleeper(_retry_delay(response, attempt))
             raise last if last is not None else RuntimeError("LLM sem resposta")
         finally:
             if owned:

@@ -99,8 +99,7 @@ def test_free_tier_503_is_retried_then_succeeds() -> None:
     from sentinela.llm import OpenAICompatibleProvider
 
     replies = [
-        httpx.Response(503, json={"error": {"code": 503}}),
-        httpx.Response(429, json={"error": {"code": 429}}, headers={"retry-after": "2"}),
+        httpx.Response(503, json={"error": {"code": 503}}, headers={"retry-after": "2"}),
         httpx.Response(200, json={"choices": [{"message": {"content": '{"positions": []}'}}]}),
     ]
     calls: list[int] = []
@@ -115,8 +114,59 @@ def test_free_tier_503_is_retried_then_succeeds() -> None:
             "https://x/v1", "k", "gemini-3.5-flash", client=client, sleeper=waits.append
         )
         assert provider.complete("p", "d") == '{"positions": []}'
-    assert len(calls) == 3
-    assert 2.0 in waits  # the server's own retry-after was honoured
+    assert len(calls) == 2
+    assert waits == [2.0]  # the server's own retry-after was honoured
+
+
+def test_a_spent_quota_switches_model_instead_of_waiting() -> None:
+    """429 on a free tier means the daily quota is gone, not that the request was too
+    fast. Sleeping cannot refill it; a lighter model has its own quota."""
+    import httpx
+
+    from sentinela.llm import OpenAICompatibleProvider
+
+    asked: list[str] = []
+    waits: list[float] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        import json as _json
+
+        model = _json.loads(request.content)["model"]
+        asked.append(model)
+        if model == "gemini-3.5-flash":
+            return httpx.Response(429, json={"error": {"code": 429}})
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as client:
+        provider = OpenAICompatibleProvider(
+            "https://x/v1", "k", "gemini-3.5-flash", client=client, sleeper=waits.append
+        )
+        assert provider.complete("p", "d") == "ok"
+    assert asked == ["gemini-3.5-flash", "gemini-3.5-flash-lite"]
+    assert waits == [], "uma cota esgotada nao se resolve esperando"
+
+
+def test_chat_replies_are_not_forced_into_json() -> None:
+    """json_mode is right for extraction, where the reply is parsed, and wrong for chat,
+    where forcing it delivers a raw JSON object into a person's conversation."""
+    import json as _json
+
+    import httpx
+
+    from sentinela.llm import OpenAICompatibleProvider
+
+    seen: list[dict] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        seen.append(_json.loads(request.content))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as client:
+        provider = OpenAICompatibleProvider("https://x/v1", "k", "m", client=client)
+        provider.complete("p", "d", json_mode=False)
+        provider.complete("p", "d")
+    assert "response_format" not in seen[0]
+    assert seen[1]["response_format"] == {"type": "json_object"}
 
 
 def test_retries_are_bounded_and_the_run_is_never_blocked() -> None:

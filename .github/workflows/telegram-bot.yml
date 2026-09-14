@@ -1,0 +1,50 @@
+name: Responder no Telegram
+
+on:
+  schedule:
+    # De hora em hora, e essa escolha e sobre dinheiro, nao sobre tecnica.
+    #
+    # O GitHub cobra minuto arredondado para cima por execucao, entao cada checagem
+    # custa 1 minuto inteiro mesmo levando 45 segundos. A conta do plano gratuito:
+    #
+    #   a cada 30 min  1.440/mes  +  coleta 420  +  backup 60  +  auditoria 24 = 1.944
+    #   de hora em hora  720/mes  +  coleta 420  +  backup 60  +  auditoria 24 = 1.224
+    #
+    # O limite e 2.000. A primeira opcao nao deixa folga para o CI dos commits; a
+    # segunda deixa. Para resposta imediata existe `sentinela bot --watch`, que faz
+    # long polling na maquina e nao gasta minuto nenhum.
+    - cron: '7 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: sentinela-bot
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  responder:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Instalar
+        # Sem Playwright e sem OCR: responder perguntas nao coleta nada, e este job
+        # roda 48 vezes por dia.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . --no-deps
+          pip install sqlalchemy psycopg[binary] pydantic pydantic-settings httpx pyyaml typer rich tzdata alembic
+      - name: Responder mensagens pendentes
+        run: sentinela bot

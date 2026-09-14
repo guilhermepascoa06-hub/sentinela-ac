@@ -551,6 +551,49 @@ def test_notification(
 
 
 @app.command()
+def bot(
+    watch: Annotated[
+        bool, typer.Option(help="Ficar escutando (resposta imediata). Ctrl+C encerra.")
+    ] = False,
+    rounds: Annotated[int, typer.Option(help="Ciclos no modo escuta. 0 = sem limite.")] = 0,
+) -> None:
+    """Responde as mensagens que chegaram no Telegram."""
+    from sentinela.bot import poll_once
+
+    configure("INFO")
+    config, secrets, engine = _context()
+    if not secrets.telegram_bot_token.get_secret_value():
+        _fail("TELEGRAM_BOT_TOKEN não configurado: não há o que escutar.")
+    factory = session_factory(engine)
+
+    def ciclo(espera: int) -> int:
+        with session_scope(factory) as session:
+            outcome = poll_once(session, config, secrets, timeout=espera)
+        if outcome.received:
+            console.print(
+                f"[green]{outcome.answered} respondida(s)[/green] · "
+                f"{outcome.ignored} ignorada(s) · {outcome.errors} erro(s)"
+            )
+        return outcome.answered
+
+    if not watch:
+        total = ciclo(0)
+        if not total:
+            console.print("[dim]Nada novo para responder.[/dim]")
+        return
+
+    console.print("[green]Escutando o Telegram. Ctrl+C encerra.[/green]")
+    volta = 0
+    try:
+        while rounds == 0 or volta < rounds:
+            # Long polling: a resposta sai em segundos, sem ficar batendo na API.
+            ciclo(25)
+            volta += 1
+    except KeyboardInterrupt:
+        console.print("\n[dim]Encerrado.[/dim]")
+
+
+@app.command()
 def watchdog(
     notify: Annotated[bool, typer.Option(help="Enfileirar alerta se houver problema.")] = True,
 ) -> None:
