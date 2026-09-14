@@ -1,6 +1,7 @@
 from datetime import date
 from typing import Protocol
 
+from sentinela.alerts import WORKLOAD_LABEL
 from sentinela.config import Configuration
 from sentinela.domain import Eligibility, OpportunityDraft, PositionDraft, normalize
 
@@ -137,7 +138,9 @@ def evaluate(
         if school and plain
         else "Escolaridade/requisitos fora do filtro principal ou não confirmados"
     )
-    reasons.append(f"Carga horária: {wc}")
+    # Stored reasons are read by a person in the panel, the bot and the alert: the
+    # classification code is not an answer to "why does this fit me?".
+    reasons.append(f"Carga horária: {WORKLOAD_LABEL.get(wc, wc)}")
     if conflict:
         reasons.append("Conflito de evidências: revisão necessária")
     if not actionable:

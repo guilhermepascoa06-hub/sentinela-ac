@@ -12,6 +12,13 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+from sentinela.alerts import (
+    EDUCATION_LABEL,
+    EMPLOYMENT_LABEL,
+    QUALIFICATION_LABEL,
+    STATUS_LABEL,
+    WORKLOAD_LABEL,
+)
 from sentinela.domain import normalize
 
 # field -> (label, is_alert_worthy)
@@ -51,6 +58,15 @@ POSITION_TRACKED: dict[str, tuple[str, bool]] = {
 STATUS_ESCALATIONS = {"CANCELLED", "SUSPENDED", "REGISTRATION_OPEN", "EXAM_SCHEDULED"}
 
 
+# A change reaches the user as text in Telegram, in /historico and in the panel.
+# "EDITAL_PUBLISHED → REGISTRATION_OPEN" is the database talking, not an answer.
+CODED_FIELDS: dict[str, dict[str, str]] = {
+    "status": STATUS_LABEL,
+    "employment_type": EMPLOYMENT_LABEL,
+    "education": EDUCATION_LABEL,
+    "qualification_category": QUALIFICATION_LABEL,
+    "workload_classification": WORKLOAD_LABEL,
+}
 MONEY_FIELDS = frozenset({"salary", "application_fee", "benefits_value"})
 DATE_FIELDS = frozenset(
     {
@@ -74,6 +90,8 @@ def _present(value: Any, field: str = "") -> str:
     """
     if value is None or value == "":
         return "não informado"
+    if isinstance(value, str) and field in CODED_FIELDS:
+        return CODED_FIELDS[field].get(value, value)
     if isinstance(value, date):
         return value.strftime("%d/%m/%Y")
     if isinstance(value, str) and (match := _ISO.match(value)):

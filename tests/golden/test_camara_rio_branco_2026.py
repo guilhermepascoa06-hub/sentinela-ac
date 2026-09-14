@@ -117,6 +117,19 @@ def test_eligibility_ranks_the_high_school_cargo_as_excellent(draft) -> None:
     assert verdict.score >= 90
 
 
+def test_stored_reasons_reach_the_reader_as_words(draft) -> None:
+    """The panel, the bot card and the alert print these strings verbatim. "Carga horária:
+    GOOD" was a stored code answering a person's question about why the cargo fits."""
+    from sentinela.alerts import WORKLOAD_LABEL
+
+    verdict = evaluate(
+        draft, position(draft, "Agente Legislativo"), Configuration(), TODAY, trust_level=1
+    )
+    workload = [reason for reason in verdict.reasons if reason.startswith("Carga horária")]
+    assert workload == [f"Carga horária: {WORKLOAD_LABEL['GOOD']}"]
+    assert "GOOD" not in workload[0]
+
+
 def test_higher_education_cargo_is_not_eligible(draft) -> None:
     verdict = evaluate(
         draft, position(draft, "Analista Legislativo"), Configuration(), TODAY, trust_level=1

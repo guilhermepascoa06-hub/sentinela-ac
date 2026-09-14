@@ -200,3 +200,26 @@ def test_status_escalation() -> None:
     assert diff.status_escalated("EDITAL_PUBLISHED", "REGISTRATION_OPEN") is True
     assert diff.status_escalated("REGISTRATION_OPEN", "REGISTRATION_OPEN") is False
     assert diff.status_escalated("REGISTRATION_OPEN", "REGISTRATION_CLOSED") is False
+
+
+def test_coded_fields_change_in_words_and_keep_the_code_for_audit() -> None:
+    """The change is read in Telegram, in /historico and in the panel. "Situação do
+    certame: EDITAL_PUBLISHED → REGISTRATION_OPEN" is the database talking to a person."""
+    changes = {
+        change["field"]: change
+        for change in diff.compare(
+            {"status": "EDITAL_PUBLISHED", "organizing_board": "IDIB"},
+            {"status": "REGISTRATION_OPEN", "organizing_board": "Cebraspe"},
+        )
+    }
+    assert changes["status"]["old_value"] == "Edital publicado"
+    assert changes["status"]["new_value"] == "Inscrições abertas"
+    # The audit trail still carries the stored code, which is what the writer compares.
+    assert changes["status"]["raw_new"] == "REGISTRATION_OPEN"
+    # Free text is never rewritten: only fields whose values are codes.
+    assert changes["organizing_board"]["new_value"] == "Cebraspe"
+
+
+def test_unknown_code_is_shown_as_stored_instead_of_being_invented() -> None:
+    changes = diff.compare({"status": "EXPECTED"}, {"status": "NEW_STATE_FROM_THE_FUTURE"})
+    assert changes[0]["new_value"] == "NEW_STATE_FROM_THE_FUTURE"

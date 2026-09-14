@@ -14,6 +14,7 @@ from typing import Any
 from sentinela.domain import digest, normalize
 
 TELEGRAM_LIMIT = 4096
+TRUNCATION_NOTE = "[mensagem truncada]"
 WORKLOAD_LABEL = {
     "PERFECT": "PERFEITA (≤20h)",
     "GOOD": "BOA (21–30h)",
@@ -26,6 +27,19 @@ EMPLOYMENT_LABEL = {
     "SELECTION": "Processo seletivo",
     "TEMPORARY": "CONTRATO TEMPORÁRIO",
     "UNKNOWN": "Vínculo não confirmado",
+}
+QUALIFICATION_LABEL = {
+    "HIGH SCHOOL ONLY": "Nenhuma além do ensino médio",
+    "HIGH SCHOOL + TECHNICAL QUALIFICATION": "Ensino médio + curso técnico",
+    "HIGH SCHOOL + PROFESSIONAL REGISTRATION": "Ensino médio + registro profissional",
+    "HIGH SCHOOL + DRIVER/LICENSE REQUIREMENT": "Ensino médio + CNH",
+    "OTHER ADDITIONAL REQUIREMENT": "Outra exigência adicional",
+    "UNKNOWN": "Não confirmada",
+}
+EDUCATION_LABEL = {
+    "primary": "Ensino fundamental",
+    "high_school": "Ensino médio",
+    "higher_education": "Ensino superior",
 }
 STATUS_LABEL = {
     "EXPECTED": "Previsto",
@@ -84,7 +98,7 @@ def _truncate(message: str, limit: int = TELEGRAM_LIMIT) -> str:
     keep = message
     while len(keep.encode("utf-16-le")) // 2 > limit - 30:
         keep = keep[: int(len(keep) * 0.9)]
-    return keep.rstrip() + "\n\n[mensagem truncada]"
+    return keep.rstrip() + f"\n\n{TRUNCATION_NOTE}"
 
 
 def _lines(*rows: tuple[str, str | None]) -> str:
@@ -108,7 +122,8 @@ def opportunity_message(
         qualification_text = "Nenhuma"
     else:
         extras = list(getattr(position, "additional_qualifications", []) or [])
-        qualification_text = f"{qualification}" + (f" — {'; '.join(extras)}" if extras else "")
+        named = QUALIFICATION_LABEL.get(qualification, qualification)
+        qualification_text = f"{named}" + (f" — {'; '.join(extras)}" if extras else "")
     workload = (
         f"{position.weekly_workload:g}h/semana"
         if position.weekly_workload
@@ -126,9 +141,7 @@ def opportunity_message(
         ),
         (
             "Escolaridade:",
-            "Ensino médio"
-            if position.education == "high_school"
-            else (position.education or "não confirmada"),
+            EDUCATION_LABEL.get(position.education, position.education) or "não confirmada",
         ),
         ("Qualificação adicional:", qualification_text),
         ("Lotação:", f"{assignment}/AC" if position.assignment_confirmed else assignment),
