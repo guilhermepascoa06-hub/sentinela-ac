@@ -3,7 +3,9 @@
 Inventário das fontes. A configuração viva é **`sources.yaml`**; este documento
 explica o que cada uma cobre e, principalmente, onde cada uma falha.
 
-**33 fontes** — 32 oficiais e 1 de descoberta. Na última coleta real: 26 saudáveis, 7 degradadas.
+**33 fontes confiáveis** — 32 oficiais e 1 de descoberta — mais **1 candidata(s)** encontrada(s) automaticamente.
+
+Na última coleta real: 26 saudáveis, 7 degradadas.
 
 ## Hierarquia de confiança
 
@@ -19,41 +21,42 @@ o documento oficial antes de avisar o usuário.
 
 ## Resumo
 
-| ID | Instituição | Nível | Estado | Última coleta OK | Docs |
-|---|---|---|---|---|---|
-| `camara-rio-branco` | Câmara Municipal de Rio Branco | 1 | HEALTHY | 14/09/2026 00:48 | 7 |
-| `prefeitura-rio-branco` | Prefeitura Municipal de Rio Branco | 1 | HEALTHY | 14/09/2026 00:48 | 8 |
-| `banco-amazonia` | Banco da Amazônia | 1 | HEALTHY | 14/09/2026 00:48 | 1 |
-| `banco-brasil` | Banco do Brasil | 1 | DEGRADED | nunca | — |
-| `caixa` | Caixa Econômica Federal | 1 | HEALTHY | 14/09/2026 00:48 | 6 |
-| `doe-acre` | Governo do Estado do Acre | 1 | HEALTHY | 14/09/2026 00:48 | 0 |
-| `mpac` | Ministério Público do Estado do Acre | 1 | HEALTHY | 14/09/2026 00:49 | 7 |
-| `rb-simplificado` | Prefeitura Municipal de Rio Branco | 1 | HEALTHY | 14/09/2026 00:49 | 0 |
-| `sead-acre` | Governo do Estado do Acre - SEAD | 1 | DEGRADED | nunca | — |
-| `tjac` | Tribunal de Justiça do Estado do Acre | 1 | DEGRADED | nunca | — |
-| `aleac` | Assembleia Legislativa do Estado do Acre | 1 | HEALTHY | 14/09/2026 00:51 | 1 |
-| `conab` | Companhia Nacional de Abastecimento | 1 | HEALTHY | 14/09/2026 00:51 | 6 |
-| `crea-ac` | Conselho Regional de Engenharia e Agronomi | 1 | HEALTHY | 14/09/2026 00:51 | 6 |
-| `crm-ac` | Conselho Regional de Medicina do Acre | 1 | HEALTHY | 14/09/2026 00:51 | 3 |
-| `dou` | Imprensa Nacional | 1 | HEALTHY | 14/09/2026 00:51 | 0 |
-| `dpe-ac` | Defensoria Pública do Estado do Acre | 1 | HEALTHY | 14/09/2026 00:51 | 0 |
-| `estado-acre` | Governo do Estado do Acre | 1 | DEGRADED | nunca | — |
-| `ibge` | Instituto Brasileiro de Geografia e Estatí | 1 | DEGRADED | nunca | — |
-| `ifac` | Instituto Federal do Acre | 1 | HEALTHY | 14/09/2026 00:53 | 7 |
-| `tce-ac` | Tribunal de Contas do Estado do Acre | 1 | HEALTHY | 14/09/2026 00:53 | 0 |
-| `tre-ac` | Tribunal Regional Eleitoral do Acre | 1 | HEALTHY | 14/09/2026 00:53 | 6 |
-| `ufac` | Universidade Federal do Acre | 1 | HEALTHY | 14/09/2026 00:53 | 8 |
-| `cnu` | Ministério da Gestão e da Inovação em Serv | 1 | HEALTHY | 14/09/2026 00:54 | 6 |
-| `correios` | Empresa Brasileira de Correios e Telégrafo | 1 | HEALTHY | 14/09/2026 00:54 | 6 |
-| `funai` | Fundação Nacional dos Povos Indígenas | 1 | DEGRADED | nunca | — |
-| `ibama` | Instituto Brasileiro do Meio Ambiente e do | 1 | HEALTHY | 14/09/2026 00:54 | 6 |
-| `inss` | Instituto Nacional do Seguro Social | 1 | HEALTHY | 14/09/2026 00:54 | 6 |
-| `transparencia-acre` | Governo do Estado do Acre - SEAD | 1 | HEALTHY | 14/09/2026 00:54 | 1 |
-| `trf1` | Tribunal Regional Federal da 1ª Região | 1 | HEALTHY | 14/09/2026 00:55 | 6 |
-| `trt14` | Tribunal Regional do Trabalho da 14ª Regiã | 1 | HEALTHY | 14/09/2026 00:55 | 6 |
-| `idib` | Instituto de Desenvolvimento Institucional | 2 | DEGRADED | nunca | — |
-| `cebraspe-tce-ac` | Tribunal de Contas do Estado do Acre | 2 | HEALTHY | 14/09/2026 00:55 | 1 |
-| `pci` | PCI Concursos | 3 | HEALTHY | 14/09/2026 00:55 | 6 |
+| ID | Instituição | Nível | Situação | Estado | Última coleta OK | Docs |
+|---|---|---|---|---|---|---|
+| `camara-rio-branco` | Câmara Municipal de Rio Branco | 1 | TRUSTED | HEALTHY | 14/09/2026 00:48 | 7 |
+| `prefeitura-rio-branco` | Prefeitura Municipal de Rio Branco | 1 | TRUSTED | HEALTHY | 14/09/2026 00:48 | 8 |
+| `banco-amazonia` | Banco da Amazônia | 1 | TRUSTED | HEALTHY | 14/09/2026 00:48 | 1 |
+| `banco-brasil` | Banco do Brasil | 1 | TRUSTED | DEGRADED | nunca | — |
+| `caixa` | Caixa Econômica Federal | 1 | TRUSTED | HEALTHY | 14/09/2026 00:48 | 6 |
+| `doe-acre` | Governo do Estado do Acre | 1 | TRUSTED | HEALTHY | 14/09/2026 00:48 | 0 |
+| `mpac` | Ministério Público do Estado do Acre | 1 | TRUSTED | HEALTHY | 14/09/2026 00:49 | 7 |
+| `rb-simplificado` | Prefeitura Municipal de Rio Branco | 1 | TRUSTED | HEALTHY | 14/09/2026 00:49 | 0 |
+| `sead-acre` | Governo do Estado do Acre - SEAD | 1 | TRUSTED | DEGRADED | nunca | — |
+| `tjac` | Tribunal de Justiça do Estado do Acre | 1 | TRUSTED | DEGRADED | nunca | — |
+| `aleac` | Assembleia Legislativa do Estado do Acre | 1 | TRUSTED | HEALTHY | 14/09/2026 00:51 | 1 |
+| `conab` | Companhia Nacional de Abastecimento | 1 | TRUSTED | HEALTHY | 14/09/2026 00:51 | 6 |
+| `crea-ac` | Conselho Regional de Engenharia e Agrono | 1 | TRUSTED | HEALTHY | 14/09/2026 00:51 | 6 |
+| `crm-ac` | Conselho Regional de Medicina do Acre | 1 | TRUSTED | HEALTHY | 14/09/2026 00:51 | 3 |
+| `dou` | Imprensa Nacional | 1 | TRUSTED | HEALTHY | 14/09/2026 00:51 | 0 |
+| `dpe-ac` | Defensoria Pública do Estado do Acre | 1 | TRUSTED | HEALTHY | 14/09/2026 00:51 | 0 |
+| `estado-acre` | Governo do Estado do Acre | 1 | TRUSTED | DEGRADED | nunca | — |
+| `ibge` | Instituto Brasileiro de Geografia e Esta | 1 | TRUSTED | DEGRADED | nunca | — |
+| `ifac` | Instituto Federal do Acre | 1 | TRUSTED | HEALTHY | 14/09/2026 00:53 | 7 |
+| `tce-ac` | Tribunal de Contas do Estado do Acre | 1 | TRUSTED | HEALTHY | 14/09/2026 00:53 | 0 |
+| `tre-ac` | Tribunal Regional Eleitoral do Acre | 1 | TRUSTED | HEALTHY | 14/09/2026 00:53 | 6 |
+| `ufac` | Universidade Federal do Acre | 1 | TRUSTED | HEALTHY | 14/09/2026 00:53 | 8 |
+| `cnu` | Ministério da Gestão e da Inovação em Se | 1 | TRUSTED | HEALTHY | 14/09/2026 00:54 | 6 |
+| `correios` | Empresa Brasileira de Correios e Telégra | 1 | TRUSTED | HEALTHY | 14/09/2026 00:54 | 6 |
+| `funai` | Fundação Nacional dos Povos Indígenas | 1 | TRUSTED | DEGRADED | nunca | — |
+| `ibama` | Instituto Brasileiro do Meio Ambiente e  | 1 | TRUSTED | HEALTHY | 14/09/2026 00:54 | 6 |
+| `inss` | Instituto Nacional do Seguro Social | 1 | TRUSTED | HEALTHY | 14/09/2026 00:54 | 6 |
+| `transparencia-acre` | Governo do Estado do Acre - SEAD | 1 | TRUSTED | HEALTHY | 14/09/2026 00:54 | 1 |
+| `trf1` | Tribunal Regional Federal da 1ª Região | 1 | TRUSTED | HEALTHY | 14/09/2026 00:55 | 6 |
+| `trt14` | Tribunal Regional do Trabalho da 14ª Reg | 1 | TRUSTED | HEALTHY | 14/09/2026 00:55 | 6 |
+| `idib` | Instituto de Desenvolvimento Institucion | 2 | TRUSTED | DEGRADED | nunca | — |
+| `cebraspe-tce-ac` | Tribunal de Contas do Estado do Acre | 2 | TRUSTED | HEALTHY | 14/09/2026 00:55 | 1 |
+| `pci` | PCI Concursos | 3 | TRUSTED | HEALTHY | 14/09/2026 00:55 | 6 |
+| `cand-rbgpi-riobranco-ac-gov-br` | rbgpi.riobranco.ac.gov.br | 3 | CANDIDATE | HEALTHY | nunca | — |
 
 ## Detalhe por fonte
 
@@ -453,6 +456,18 @@ o documento oficial antes de avisar o usuário.
 - **Última validação de URL:** 13/09/2026
 - **Limitações conhecidas:** Somente descoberta. Toda oportunidade requer confirmação institucional ou banca legitimada.
 
+### `cand-rbgpi-riobranco-ac-gov-br` — Candidata: rbgpi.riobranco.ac.gov.br
+
+- **Instituição:** rbgpi.riobranco.ac.gov.br
+- **URL:** https://rbgpi.riobranco.ac.gov.br/
+- **Classificação:** Nível 3 — portal especializado · secundária, só descoberta · `CANDIDATE` (descoberta por `camara-rio-branco`)
+- **Coleta:** adaptador `generic` sobre HTML, até 5 documentos por execução
+- **Hosts permitidos:** `rbgpi.riobranco.ac.gov.br`
+- **Saúde:** HEALTHY — coletando normalmente (falhas consecutivas: 0)
+- **Última coleta bem-sucedida:** nunca
+- **Última validação de URL:** —
+- **Limitações conhecidas:** Descoberta automatica: aguarda validacao manual antes de virar TRUSTED.
+
 ## Fontes de descoberta
 
 Fontes de nível 3 e 4 existem para o sistema tomar conhecimento de que algo foi
@@ -462,8 +477,15 @@ Sentinela procura o edital oficial antes de gerar alerta primário.
 ## Fontes descobertas automaticamente
 
 A auditoria semanal procura portais oficiais novos linkados pelas fontes já confiáveis.
-Elas entram como `CANDIDATE`, nunca produzem alerta primário, e só viram `TRUSTED` após
-validação. `sentinela sources` mostra quais estão pendentes (marcadas com `*`).
+Elas entram como `CANDIDATE`, nunca produzem alerta primário e só viram `TRUSTED` após
+validação humana. `sentinela sources` marca as pendentes com `*`.
+
+Para promover uma candidata depois de conferir que ela realmente publica concursos:
+
+```python
+from sentinela.registry import promote
+promote(session, 'cand-...', trust_level=1)
+```
 
 ## Como acrescentar ou consertar uma fonte
 
