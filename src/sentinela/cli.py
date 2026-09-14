@@ -40,7 +40,6 @@ from sentinela.models import (
     Source,
     SourceHealth,
 )
-from sentinela.pipeline import finalize_run, run_is_fresh, run_monitor, utc_schedule
 from sentinela.registry import load_registry, sync
 
 app = typer.Typer(
@@ -82,6 +81,8 @@ def run(
     log_level: Annotated[str, typer.Option()] = "INFO",
 ) -> None:
     """Executa um ciclo completo de monitoramento."""
+    from sentinela.pipeline import finalize_run, run_is_fresh, run_monitor
+
     configure(log_level)
     logger = RunLogger(get("cli"), {})
     try:
@@ -295,6 +296,8 @@ def sources(
 @app.command("source-check")
 def source_check(source_id: Annotated[str, typer.Argument()]) -> None:
     """Coleta uma única fonte agora, sem tocar no circuito das demais."""
+    from sentinela.pipeline import run_monitor
+
     configure("INFO")
     config, secrets, engine = _context()
     factory = session_factory(engine)
@@ -315,6 +318,8 @@ def source_check(source_id: Annotated[str, typer.Argument()]) -> None:
 @app.command()
 def doctor() -> None:
     """Diagnóstico completo de banco, migrations, fontes, notificações e watchdog."""
+    from sentinela.pipeline import utc_schedule
+
     config = load_config()
     secrets = Secrets()
     console.print("[bold]Sentinela AC Doctor[/bold]\n")
@@ -648,6 +653,8 @@ def backup(
 @app.command()
 def schedule() -> None:
     """Mostra os horários de execução convertidos para UTC."""
+    from sentinela.pipeline import utc_schedule
+
     config = load_config()
     console.print(
         f"Primária {config.monitoring.primary_local_time} "

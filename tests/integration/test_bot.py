@@ -11,6 +11,8 @@ from sentinela.bot import AJUDA, poll_once, route
 from sentinela.config import Configuration, Secrets
 from sentinela.models import Source
 
+# Deliberately fictional. A real chat id is a personal identifier, and this file is
+# public: nothing here should point at anyone's actual Telegram account.
 OWNER = "1000000001"
 STRANGER = "2000000002"
 
@@ -228,3 +230,32 @@ def test_a_model_outage_falls_back_to_the_commands(
     finally:
         llm_module.build_provider = original
     assert "/vagas" in reply
+
+
+def test_the_bot_path_does_not_drag_in_the_scraping_stack() -> None:
+    """Regression: the CLI imported the pipeline at module level, so answering a Telegram
+    message pulled in bs4, pymupdf and playwright. The cloud job installed only what the
+    bot needs and died on `No module named bs4`; installing everything instead would push
+    each hourly run past a billed minute, doubling what the bot costs."""
+    import builtins
+    import importlib
+    import sys
+
+    heavy = {"bs4", "pymupdf", "fitz", "playwright", "pypdf"}
+    for name in list(sys.modules):
+        if name.split(".")[0] == "sentinela":
+            del sys.modules[name]
+
+    real = builtins.__import__
+
+    def guard(name: str, *args: object, **kwargs: object):
+        if name.split(".")[0] in heavy:
+            raise ImportError(f"{name} nao deveria ser necessario para responder mensagem")
+        return real(name, *args, **kwargs)  # type: ignore[arg-type]
+
+    builtins.__import__ = guard
+    try:
+        importlib.import_module("sentinela.cli")
+        importlib.import_module("sentinela.bot")
+    finally:
+        builtins.__import__ = real
