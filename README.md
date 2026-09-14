@@ -187,6 +187,21 @@ O número é o `TELEGRAM_CHAT_ID`.
 > Repositório privado tem 2.000 minutos/mês de Actions no plano gratuito; este projeto usa
 > cerca de 300. Repositório público é ilimitado — mas o `.env` **nunca** vai para o Git.
 
+### Ativação em um comando
+
+O repositório traz **`ativar.ps1`**, que faz todo o resto sozinho:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .tivar.ps1
+```
+
+Ele pede (com digitação oculta) a string de conexão e o token do Telegram, e então:
+normaliza a URL, recusa a porta 6543, grava o `.env`, aplica as migrations no banco de
+produção, descobre o seu `chat_id` sozinho, roda o diagnóstico, envia uma mensagem de
+teste, cadastra os três segredos no GitHub e dispara a primeira execução na nuvem.
+
+As credenciais nunca aparecem na tela, nunca vão para o Git e nunca entram em log.
+
 ### Segredos necessários
 
 | Segredo | Obrigatório | Para quê |
