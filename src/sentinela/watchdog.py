@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from sentinela import alerts
 from sentinela.config import Configuration, Secrets
+from sentinela.db import database_size_mb
 from sentinela.domain import digest, now, utc
 from sentinela.models import MonitorRun, Notification, SourceHealth
 
@@ -86,13 +87,16 @@ def evaluate(
         .select_from(Notification)
         .where(Notification.status.in_(["RETRY", "UNCERTAIN", "FAILED"]))
     ).scalar_one()
+    # A heartbeat that stopped moving means the process died mid-run without saying so.
+    stale_after = max(
+        config.monitoring.heartbeat_stale_minutes, config.monitoring.max_run_minutes + 5
+    )
     running_too_long = session.execute(
         sa.select(sa.func.count())
         .select_from(MonitorRun)
         .where(
             MonitorRun.status == "RUNNING",
-            MonitorRun.started_at
-            < reference - timedelta(minutes=config.monitoring.max_run_minutes * 2),
+            MonitorRun.started_at < reference - timedelta(minutes=stale_after),
         )
     ).scalar_one()
 
@@ -102,7 +106,16 @@ def evaluate(
     if stuck:
         problems.append(f"{stuck} notificação(ões) pendentes de entrega ou revisão")
     if running_too_long:
-        problems.append(f"{running_too_long} execução(ões) presa(s) no estado RUNNING")
+        problems.append(
+            f"{running_too_long} execução(ões) sem heartbeat há mais de {stale_after} min"
+        )
+    storage_warning = float(config.storage.get("warning_size_mb") or 0)
+    used = database_size_mb(session.get_bind())
+    if storage_warning and used is not None and used >= storage_warning:
+        problems.append(
+            f"banco em {used:.0f} MB, acima do aviso de {storage_warning:.0f} MB "
+            "(o plano gratuito para de aceitar escrita ao atingir o teto)"
+        )
     if problems:
         return WatchdogVerdict(
             True,

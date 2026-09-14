@@ -436,6 +436,100 @@ def parse_employment_type(text: str) -> str:
     return "UNKNOWN"
 
 
+# The employment regime decides what the job actually is: a statutory civil servant has
+# stability and a different pension; a CLT employee does not. The spec asks for it and it
+# is stated plainly in every edital, usually by naming the law that governs it.
+REGIME_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "Estatutário",
+        ("regime juridico estatutario", "regime estatutario", "estatutario dos servidores"),
+    ),
+    (
+        "CLT",
+        ("consolidacao das leis do trabalho", "regime da clt", "celetista", "regime celetista"),
+    ),
+    ("Administrativo especial", ("regime administrativo especial", "regime especial")),
+    ("Temporário", ("contratacao temporaria", "por tempo determinado")),
+)
+_BENEFIT_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "Auxílio-alimentação",
+        (
+            "auxilio alimentacao",
+            "auxilio refeicao",
+            "vale alimentacao",
+            "vale refeicao",
+            "ticket alimentacao",
+        ),
+    ),
+    ("Auxílio-transporte", ("auxilio transporte", "vale transporte")),
+    ("Auxílio-saúde", ("auxilio saude", "plano de saude", "assistencia medica")),
+    ("Auxílio-creche", ("auxilio creche", "auxilio pre escolar")),
+    ("Gratificação", ("gratificacao de", "adicional de qualificacao")),
+)
+_EXEMPTION_MARKERS = (
+    "isencao da taxa de inscricao",
+    "isencao do pagamento da taxa",
+    "isencao de taxa de inscricao",
+    "podera solicitar isencao",
+    "solicitacao de isencao",
+)
+_EXEMPTION_REASONS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("CadÚnico / baixa renda", ("cadastro unico", "cadunico", "baixa renda", "familiar de baixa")),
+    ("Doador de sangue", ("doador de sangue", "doacao de sangue")),
+    ("Doador de medula", ("doador de medula", "medula ossea")),
+    ("Desempregado", ("desempregado", "desempregada")),
+    ("Doador de leite", ("doacao de leite",)),
+)
+
+
+def parse_employment_regime(text: str) -> str | None:
+    """Which legal regime governs the post, when the edital names it."""
+    plain = normalize(text or "")
+    for label, markers in REGIME_MARKERS:
+        if any(marker in plain for marker in markers):
+            return label
+    return None
+
+
+def parse_benefits(text: str) -> str | None:
+    """Benefits named in the edital. Real money on top of a modest salary."""
+    plain = normalize(text or "")
+    found = [
+        label for label, markers in _BENEFIT_MARKERS if any(marker in plain for marker in markers)
+    ]
+    return "; ".join(found) or None
+
+
+def parse_fee_exemption(text: str) -> str | None:
+    """Who may ask for the fee to be waived.
+
+    Directly useful: someone filtering for high-school posts on a study-compatible
+    workload is often exactly who qualifies.
+    """
+    if not text:
+        return None
+    index = _locate_marker(text, _EXEMPTION_MARKERS)
+    if index < 0:
+        return None
+    window = normalize(text[index : index + 2500])
+    reasons = [
+        label
+        for label, markers in _EXEMPTION_REASONS
+        if any(marker in window for marker in markers)
+    ]
+    return "; ".join(reasons) or "Prevista no edital: consultar condições"
+
+
+def _locate_marker(text: str, markers: tuple[str, ...]) -> int:
+    plain, origins = normalize_indexed(text)
+    for marker in markers:
+        found = plain.find(marker)
+        if found >= 0:
+            return origins[found]
+    return -1
+
+
 DOCUMENT_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("CANCELLATION", ("cancelamento", "anulacao do edital", "tornar sem efeito", "revogacao")),
     ("SUSPENSION", ("suspensao", "suspenso o certame", "sobrestamento")),

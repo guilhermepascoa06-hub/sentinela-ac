@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-PARSER_VERSION = "2026.09.14.1"
+PARSER_VERSION = "2026.09.14.2"  # regime juridico, beneficios e condicoes de isencao
 FieldStatus = Literal["FOUND", "NOT_FOUND", "AMBIGUOUS", "CONFLICTING"]
 
 

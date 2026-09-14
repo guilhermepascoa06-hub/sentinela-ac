@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from typing import Any
 
 import sqlalchemy as sa
-from sqlalchemy.engine import Engine, make_url
+from sqlalchemy.engine import Connection, Engine, make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from sentinela.config import Secrets
@@ -122,6 +122,26 @@ def ping(engine: Engine) -> tuple[bool, str]:
         return True, str(version).split(",")[0][:80]
     except sa.exc.SQLAlchemyError as error:
         return False, type(error).__name__
+
+
+def database_size_mb(bind: Engine | Connection | None) -> float | None:
+    """Size of the live database, or None where the question has no answer.
+
+    The free Supabase tier stops accepting writes at its ceiling. A monitor that dies
+    silently because the disk filled is exactly the failure this project exists to avoid.
+    """
+    if bind is None or bind.dialect.name != "postgresql":
+        return None
+    query = sa.text("SELECT pg_database_size(current_database())")
+    try:
+        if isinstance(bind, Engine):
+            with bind.connect() as connection:
+                size = connection.execute(query).scalar_one()
+        else:
+            size = bind.execute(query).scalar_one()
+        return round(float(size) / (1024 * 1024), 1)
+    except sa.exc.SQLAlchemyError:
+        return None
 
 
 def migration_state(engine: Engine) -> tuple[bool, str]:

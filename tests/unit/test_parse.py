@@ -193,3 +193,45 @@ def test_vacancies() -> None:
 def test_publication_date_prefers_labelled_value() -> None:
     text = "Prova em 22/11/2026.\nData de publicação: 11/09/2026.\n"
     assert parse_publication_date("", text) == date(2026, 9, 11)
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("Lei Municipal nº 1.794/2009 (Regime Jurídico Estatutário dos Servidores)", "Estatutário"),
+        ("contratação sob o regime da CLT", "CLT"),
+        ("celetista, nos termos da Consolidação das Leis do Trabalho", "CLT"),
+        ("contratação temporária por tempo determinado", "Temporário"),
+        ("nada sobre regime aqui", None),
+    ],
+)
+def test_employment_regime(text: str, expected: str | None) -> None:
+    """Statutory or CLT decides what the job actually is: stability and pension differ.
+    The field was declared, migrated, and never once populated."""
+    from sentinela.parse import parse_employment_regime
+
+    assert parse_employment_regime(text) == expected
+
+
+def test_benefits_are_collected_not_invented() -> None:
+    from sentinela.parse import parse_benefits
+
+    texto = "Além do vencimento, auxílio-alimentação e plano de saúde, sem vale-transporte."
+    found = parse_benefits(texto)
+    assert "Auxílio-alimentação" in found
+    assert "Auxílio-saúde" in found
+    assert parse_benefits("nenhum benefício nomeado") is None
+
+
+def test_fee_exemption_reports_who_qualifies() -> None:
+    """Directly useful: whoever filters for high-school posts on a low workload is often
+    exactly who qualifies for the waiver."""
+    from sentinela.parse import parse_fee_exemption
+
+    texto = (
+        "5. DA ISENÇÃO DA TAXA DE INSCRIÇÃO. Poderá solicitar isenção o candidato inscrito "
+        "no Cadastro Único para Programas Sociais, o doador de sangue e a pessoa desempregada."
+    )
+    found = parse_fee_exemption(texto)
+    assert "CadÚnico" in found and "Doador de sangue" in found and "Desempregado" in found
+    assert parse_fee_exemption("edital sem qualquer isenção prevista") is None

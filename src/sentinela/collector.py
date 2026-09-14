@@ -127,6 +127,7 @@ def collect(
     ocr_pages: int = 12,
     allow_ocr: bool = True,
     browser: Any = None,
+    budget: int | None = None,
 ) -> SourceOutcome:
     outcome = SourceOutcome(source_id=spec.id, status="FAILED")
     try:
@@ -222,7 +223,8 @@ def collect(
         seen.add(url)
         ordered.append((url, label))
 
-    for url, label in ordered[: spec.max_documents]:
+    allowance = spec.max_documents if budget is None else min(spec.max_documents, budget)
+    for url, label in ordered[:allowance]:
         response = fetcher.get(url)
         if outcome.rendered and not response.ok and browser is not None:
             # The listing only opened in the browser, so its documents sit behind the

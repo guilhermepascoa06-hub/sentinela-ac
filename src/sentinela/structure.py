@@ -27,10 +27,13 @@ from sentinela.parse import (
     institution_implies_city,
     is_job_selection,
     location_context,
+    parse_benefits,
     parse_date,
     parse_dates,
     parse_edital_number,
+    parse_employment_regime,
     parse_employment_type,
+    parse_fee_exemption,
     parse_money,
     parse_period,
     parse_publication_date,
@@ -358,6 +361,7 @@ def _position_from_row(
     doc_snippet: str,
     doc_workload: float | None,
     institutional: bool = False,
+    benefits: str | None = None,
 ) -> PositionDraft:
     category, education, extras = classify_qualification(row.requirements)
     if education is None:
@@ -430,6 +434,7 @@ def _position_from_row(
         salary=row.salary,
         weekly_workload=workload,
         daily_workload=row.daily_workload,
+        benefits=benefits,
         requirements=row.requirements or None,
         evidence=evidence,
     )
@@ -460,6 +465,7 @@ def build_opportunity(
         )
     doc_locations = [city] if assignment else []
     doc_workload = parse_weekly_workload(text)
+    benefits = parse_benefits(text)
     schedule = schedule_from_tables(tables) or {}
     for key, value in _schedule_from_text(text).items():
         schedule.setdefault(key, value)
@@ -487,6 +493,8 @@ def build_opportunity(
         edital_number=edital_number,
         publication_date=publication,
         employment_type=parse_employment_type(f"{title}\n{text[:8000]}"),
+        employment_regime=parse_employment_regime(text),
+        fee_exemption=parse_fee_exemption(text),
         organizing_board=_board(text, source_board),
         registration_start=(schedule.get("registration_start") or (None,))[0],
         registration_deadline=(schedule.get("registration_deadline") or (None,))[0],
@@ -532,6 +540,7 @@ def build_opportunity(
                 snippet,
                 doc_workload,
                 institutional,
+                benefits,
             )
             for row in rows
         ]

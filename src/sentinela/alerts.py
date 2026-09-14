@@ -119,7 +119,11 @@ def opportunity_message(
         ("Instituição:", opportunity.institution),
         ("Certame:", opportunity.name),
         ("Cargo:", position.name),
-        ("Tipo de vínculo:", EMPLOYMENT_LABEL.get(opportunity.employment_type, "Não confirmado")),
+        (
+            "Tipo de vínculo:",
+            EMPLOYMENT_LABEL.get(opportunity.employment_type, "Não confirmado")
+            + (f" · {opportunity.employment_regime}" if opportunity.employment_regime else ""),
+        ),
         (
             "Escolaridade:",
             "Ensino médio"
@@ -130,6 +134,7 @@ def opportunity_message(
         ("Lotação:", f"{assignment}/AC" if position.assignment_confirmed else assignment),
         ("Carga horária:", workload),
         ("Remuneração:", money(position.salary)),
+        ("Benefícios:", getattr(position, "benefits", None) or None),
         ("Vagas:", str(position.vacancies) if position.vacancies is not None else "não informado"),
         ("Cadastro de reserva:", str(position.reserve_count) if position.reserve_count else None),
         ("Inscrições:", period(opportunity.registration_start, opportunity.registration_deadline)),
@@ -138,6 +143,7 @@ def opportunity_message(
             "Prazo de isenção:",
             day(opportunity.fee_exemption_deadline) if opportunity.fee_exemption_deadline else None,
         ),
+        ("Quem pode pedir isenção:", opportunity.fee_exemption or None),
         ("Prova:", day(opportunity.exam_date)),
         ("Banca organizadora:", opportunity.organizing_board or "não informada"),
         ("Situação:", STATUS_LABEL.get(opportunity.status, opportunity.status)),

@@ -21,6 +21,7 @@ from sentinela.db import (
     DatabaseUnavailable,
     advisory_lock,
     create_engine,
+    database_size_mb,
     migration_state,
     ping,
     resolve_url,
@@ -412,6 +413,15 @@ def doctor() -> None:
     table.add_row("Watchdog", verdict.severity, verdict.title)
     table.add_row("Notificações", ", ".join(f"{s} {c}" for s, c in pending) or "vazio", "")
     table.add_row("Fila de revisão", str(review), "documentos aguardando reprocessamento")
+    used = database_size_mb(engine)
+    aviso = float(config.storage.get("warning_size_mb") or 0)
+    if used is not None:
+        colour = "red" if aviso and used >= aviso else "green"
+        table.add_row(
+            "Armazenamento",
+            f"[{colour}]{used:.0f} MB[/{colour}]",
+            f"aviso em {aviso:.0f} MB" if aviso else "sem limite configurado",
+        )
     table.add_row(
         "Agenda (UTC)",
         utc_schedule(config.monitoring.primary_local_time, config.profile.timezone),

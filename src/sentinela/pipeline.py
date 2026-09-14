@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from sentinela import alerts, diff, health
 from sentinela.collector import FoundDocument, SourceOutcome, safe_collect
 from sentinela.config import Configuration, Secrets
+from sentinela.db import database_size_mb
 from sentinela.dedup import Candidate, dedup_key, find_match, position_slug
 from sentinela.domain import OpportunityDraft, PositionDraft, digest, now, utc
 from sentinela.eligibility import effective_status, evaluate
@@ -901,11 +902,19 @@ def dispatch(
             row.status = "RETRY"
             row.not_before = now() + timedelta(seconds=result.retry_after or 60 * row.attempts)
         elif result.status == "UNCERTAIN":
-            # Telegram has no idempotency key: a blind retry can duplicate a real delivery.
-            row.status = "UNCERTAIN"
+            # Telegram has no idempotency key: a blind retry can duplicate a real delivery,
+            # so the default is to hold it for review. The config makes that a choice.
+            if config.notifications.get("retry_uncertain_delivery") and row.attempts < max_attempts:
+                row.status = "RETRY"
+                row.not_before = now() + timedelta(seconds=60 * row.attempts)
+            else:
+                row.status = "UNCERTAIN"
             logger.warning(
-                "Entrega incerta em %s: mantida para revisao",
+                "Entrega incerta em %s: %s",
                 row.channel,
+                "reenfileirada por configuracao"
+                if row.status == "RETRY"
+                else "mantida para revisao",
                 extra={"stage": "notify"},
             )
         else:
@@ -933,12 +942,22 @@ def process_source(
         report.documents_discovered += 1
         try:
             document, version, changed = persist_document(session, source.id, found, report)
+            from sentinela.domain import PARSER_VERSION
+
+            stale_parser = version.parser_version != PARSER_VERSION
             if (
                 not changed
                 and document.processing_state == "DONE"
+                and not stale_parser
                 and not _semantic_pending(session, found, llm_provider, config)
             ):
                 continue  # unchanged content: skip the expensive stages entirely
+            if stale_parser:
+                # The spec asks for exactly this: reprocess when the parser version
+                # changed. Without it, every parser improvement only ever reached
+                # documents published afterwards, and everything already stored kept the
+                # gaps the old parser left.
+                version.parser_version = PARSER_VERSION
             document.attempts += 1
             if not found.document.usable:
                 document.processing_state = "REVIEW"
@@ -1481,6 +1500,9 @@ def run_monitor(
                 max_pages=config.monitoring.max_pdf_pages,
                 ocr_pages=config.monitoring.max_ocr_pages,
                 browser=browser,
+                budget=max(
+                    0, config.monitoring.max_documents_per_run - report.documents_discovered
+                ),
             )
             log.info(
                 "Fonte %s: %s, %d documentos",
@@ -1522,6 +1544,23 @@ def run_monitor(
         generate_deadline_alerts(session, config, today, report, monitor.id)
         session.commit()
         dispatch(session, config, secrets, report, log)
+
+    limit = float(config.storage.get("warning_size_mb") or 0)
+    used = database_size_mb(session.get_bind())
+    if limit and used is not None:
+        report.detail["database_mb"] = used
+        if used >= limit:
+            record_event(
+                session,
+                monitor.id,
+                kind="STORAGE_PRESSURE",
+                severity="WARNING",
+                message=(
+                    f"Banco em {used:.0f} MB, acima do aviso de {limit:.0f} MB. "
+                    "O plano gratuito para de aceitar escrita ao atingir o teto."
+                ),
+                context={"database_mb": used, "warning_mb": limit},
+            )
 
     report.finished_at = now()
     report.status = "PARTIAL" if (report.sources_failed or report.errors) else "SUCCESS"

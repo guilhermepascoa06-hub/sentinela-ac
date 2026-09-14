@@ -980,3 +980,154 @@ def test_url_and_acronym_differences_are_not_conflicts(
     opportunity = session.execute(sa.select(Opportunity)).scalar_one()
     noisy = {"organizing_board", "official_institution_url", "official_application_url"}
     assert not [item for item in opportunity.conflicts if item["field"] in noisy]
+
+
+def test_the_per_run_document_budget_is_enforced(
+    session: Session, source: Source, config: Configuration, secrets: Secrets
+) -> None:
+    """Regression: monitoring.max_documents_per_run was declared in config.yaml and never
+    read. The safety limit simply did not exist -- 33 sources at 8 documents each can
+    reach 264 while the file says 160."""
+    import re as _re
+
+    from sentinela.collector import collect
+    from sentinela.domain import SourceSpec
+    from sentinela.fetch import Fetcher
+
+    page = b"".join(
+        f'<a href="https://x.gov.br/edital-{n}.pdf">Edital {n}</a>'.encode() for n in range(20)
+    )
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=page, headers={"content-type": "text/html"})
+
+    spec = SourceSpec(
+        id="muitos",
+        name="m",
+        institution="i",
+        base_url="https://x.gov.br/",
+        allowed_hosts=["x.gov.br"],
+        max_documents=20,
+        link_pattern=_re.escape(".pdf"),
+    )
+    with Fetcher(
+        client=httpx.Client(transport=httpx.MockTransport(handle)),
+        min_interval=0,
+        sleeper=lambda _: None,
+    ) as fetcher:
+        unlimited = collect(spec, fetcher)
+        limited = collect(spec, fetcher, budget=3)
+    assert len(unlimited.documents) > 3
+    assert len(limited.documents) == 3
+
+
+def test_uncertain_delivery_is_held_by_default_and_retried_only_on_request(
+    session: Session, source: Source, secrets: Secrets
+) -> None:
+    """Regression: notifications.retry_uncertain_delivery was declared and never read, so
+    what the file presented as a choice was hardcoded."""
+    from sentinela.logging import RunLogger, get
+    from sentinela.notifications import DeliveryResult
+    from sentinela.pipeline import dispatch, queue_notification
+
+    class Ambiguous:
+        name = "telegram"
+
+        def send(self, key: str, message: str) -> DeliveryResult:
+            return DeliveryResult("UNCERTAIN", error="sem confirmacao")
+
+    import sentinela.notifications as notifications_module
+
+    original = notifications_module.make_notifiers
+    notifications_module.make_notifiers = lambda *_: [Ambiguous()]
+    try:
+        for retry, expected in ((False, "UNCERTAIN"), (True, "RETRY")):
+            settings = Configuration(
+                notifications={
+                    "telegram": True,
+                    "markdown": False,
+                    "retry_uncertain_delivery": retry,
+                }
+            )
+            queue_notification(
+                session,
+                key=f"k{retry}",
+                category="NEW_OPPORTUNITY",
+                body="x",
+                channels=["telegram"],
+            )
+            session.commit()
+            dispatch(session, settings, secrets, RunReport(run_id=RUN_ID), RunLogger(get("t"), {}))
+            session.commit()
+            row = session.execute(
+                sa.select(Notification).where(Notification.idempotency_key == f"telegram:k{retry}")
+            ).scalar_one()
+            assert row.status == expected
+    finally:
+        notifications_module.make_notifiers = original
+
+
+def test_a_run_records_how_much_storage_is_left(
+    session: Session, source: Source, config: Configuration, secrets: Secrets
+) -> None:
+    """Regression: storage.warning_size_mb existed because the free tier stops accepting
+    writes at its ceiling, and nothing ever checked it. A monitor that dies because the
+    disk filled is precisely the silent death this project exists to prevent."""
+    from sentinela.pipeline import run_monitor
+
+    result = run_monitor(session, config, secrets, kind="manual", only=[source.id], dry_run=True)
+    session.commit()
+    # None on SQLite, a number on PostgreSQL: either way the run must not blow up.
+    assert "database_mb" in result.detail or session.get_bind().dialect.name == "sqlite"
+
+
+def test_a_parser_improvement_reaches_documents_already_stored(
+    session: Session, source: Source, config: Configuration
+) -> None:
+    """Regression: parser_version was written on every document version and never once
+    compared. Unchanged documents were skipped, so every parser improvement only ever
+    reached editais published afterwards while everything already stored kept the gaps
+    the old parser left. The spec asks for exactly this reprocessing trigger."""
+    from sentinela.collector import SourceOutcome
+    from sentinela.domain import PARSER_VERSION
+    from sentinela.logging import RunLogger, get
+    from sentinela.models import DocumentVersion
+    from sentinela.pipeline import process_source
+
+    report = RunReport(run_id=RUN_ID)
+    document_found = found(b"%PDF edital ja armazenado")
+    outcome = SourceOutcome(source.id, "OK", [document_found])
+    logger = RunLogger(get("test"), {})
+
+    process_source(
+        session,
+        source,
+        outcome,
+        config=config,
+        today=TODAY,
+        report=report,
+        run_id=None,
+        logger=logger,
+    )
+    session.commit()
+
+    version = session.execute(sa.select(DocumentVersion)).scalar_one()
+    version.parser_version = "versao-antiga"
+    document = session.execute(sa.select(Document)).scalar_one()
+    document.processing_state = "DONE"
+    session.commit()
+
+    process_source(
+        session,
+        source,
+        outcome,
+        config=config,
+        today=TODAY,
+        report=report,
+        run_id=None,
+        logger=logger,
+    )
+    session.commit()
+
+    session.refresh(version)
+    assert version.parser_version == PARSER_VERSION, "o documento antigo nao foi reprocessado"
