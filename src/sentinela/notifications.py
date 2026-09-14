@@ -18,7 +18,10 @@ import httpx
 
 from sentinela.config import Configuration, Secrets
 
-DeliveryStatus = Literal["SENT", "RETRY", "UNCERTAIN", "BLOCKED"]
+# UNCONFIGURED is deliberately distinct from BLOCKED. BLOCKED means the channel
+# rejected THIS message and retrying it is pointless. UNCONFIGURED means the channel
+# has no credentials yet -- the message is fine and must go out once they arrive.
+DeliveryStatus = Literal["SENT", "RETRY", "UNCERTAIN", "BLOCKED", "UNCONFIGURED"]
 
 
 @dataclass(frozen=True)
@@ -83,7 +86,7 @@ class TelegramNotifier:
 
     def send(self, key: str, message: str) -> DeliveryResult:
         if not self._token or not self._chat:
-            return DeliveryResult("BLOCKED", error="Telegram credentials not configured")
+            return DeliveryResult("UNCONFIGURED", error="Telegram sem credenciais")
         # One request per notification: splitting creates partial-send ambiguity.
         # Plain text also prevents untrusted document text from injecting markup.
         if len(message.encode("utf-16-le")) // 2 > 4096:
@@ -141,7 +144,7 @@ class EmailNotifier:
                 cfg.smtp_password.get_secret_value(),
             )
         ):
-            return DeliveryResult("BLOCKED", error="Email credentials not configured")
+            return DeliveryResult("UNCONFIGURED", error="E-mail sem credenciais")
         identity = hashlib.sha256(key.encode()).hexdigest()
         mail = EmailMessage()
         try:

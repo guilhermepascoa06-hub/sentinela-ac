@@ -800,7 +800,9 @@ def dispatch(
         session.execute(
             sa.select(Notification)
             .where(
-                Notification.status.in_(["PENDING", "RETRY"]),
+                # UNCONFIGURED rows are picked up again: the alert was never the
+                # problem, the missing credential was, and it may exist by now.
+                Notification.status.in_(["PENDING", "RETRY", "UNCONFIGURED"]),
                 sa.or_(Notification.not_before.is_(None), Notification.not_before <= now()),
             )
             .order_by(Notification.created_at)
@@ -819,6 +821,12 @@ def dispatch(
         result = adapter.send(row.idempotency_key, row.body)
         row.external_id = result.external_id or row.external_id
         row.last_error = result.error
+        if result.status == "UNCONFIGURED":
+            # Not an attempt against the message: do not burn the retry budget.
+            row.attempts -= 1
+            row.status = "UNCONFIGURED"
+            session.flush()
+            continue
         if result.status == "SENT":
             row.status, row.sent_at = "SENT", now()
             report.notifications_sent += 1

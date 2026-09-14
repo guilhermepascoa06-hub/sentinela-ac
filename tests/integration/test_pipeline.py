@@ -596,3 +596,69 @@ def _logger():
     from sentinela.logging import RunLogger, get
 
     return RunLogger(get("test"), {})
+
+
+def test_alert_queued_before_credentials_exist_is_delivered_later(
+    session: Session, source: Source, secrets: Secrets
+) -> None:
+    """Regression: the first production run happened before the Telegram secrets were
+    registered. The alert was marked BLOCKED -- a terminal state -- so it was never
+    retried, and idempotency meant it could never be regenerated either. The user would
+    simply never have received the one opportunity that mattered."""
+    from sentinela.logging import RunLogger, get
+    from sentinela.pipeline import dispatch, queue_notification
+
+    config = Configuration(notifications={"telegram": True, "markdown": False})
+    report = RunReport(run_id=RUN_ID)
+    logger = RunLogger(get("test"), {})
+
+    queue_notification(
+        session,
+        key="k",
+        category="NEW_OPPORTUNITY",
+        body="alerta",
+        channels=["telegram"],
+        subject="Agente Legislativo",
+    )
+    session.commit()
+
+    # No credentials yet.
+    dispatch(session, config, secrets, report, logger)
+    session.commit()
+    row = session.execute(sa.select(Notification)).scalar_one()
+    assert row.status == "UNCONFIGURED"
+    assert report.notifications_sent == 0
+
+    # Credentials arrive; the same row must now be delivered.
+    from pydantic import SecretStr
+
+    configured = Secrets(
+        _env_file=None,
+        telegram_bot_token=SecretStr("1234567890:token"),
+        telegram_chat_id=SecretStr("42"),
+    )
+    sent: list[str] = []
+
+    class Fake:
+        name = "telegram"
+
+        def send(self, key: str, message: str):
+            from sentinela.notifications import DeliveryResult
+
+            sent.append(key)
+            return DeliveryResult("SENT", external_id="99")
+
+    import sentinela.notifications as notifications_module
+
+    original = notifications_module.make_notifiers
+    notifications_module.make_notifiers = lambda *_: [Fake()]
+    try:
+        dispatch(session, config, configured, report, logger)
+        session.commit()
+    finally:
+        notifications_module.make_notifiers = original
+
+    session.refresh(row)
+    assert row.status == "SENT"
+    assert sent == ["telegram:k"]
+    assert report.notifications_sent == 1

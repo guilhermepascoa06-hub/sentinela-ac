@@ -100,8 +100,11 @@ def test_missing_credentials_are_not_a_success() -> None:
         telegram_chat_id=SecretStr(""),
         smtp_host="",
     )
-    assert TelegramNotifier(empty).send("key", "message").status == "BLOCKED"
-    assert EmailNotifier(empty).send("key", "message").status == "BLOCKED"
+    # UNCONFIGURED, not BLOCKED: the message is fine, the credential is missing. A
+    # terminal BLOCKED here once stranded two real alerts forever, because the outbox
+    # never retries BLOCKED and idempotency prevents regenerating them.
+    assert TelegramNotifier(empty).send("key", "message").status == "UNCONFIGURED"
+    assert EmailNotifier(empty).send("key", "message").status == "UNCONFIGURED"
     assert telegram_health(empty)["status"] == "BLOCKED"
 
 
