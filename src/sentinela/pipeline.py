@@ -1126,6 +1126,7 @@ def run_monitor(
     kind: str = "daily",
     trigger: str = "manual",
     only: list[str] | None = None,
+    force: bool = False,
     dry_run: bool = False,
     logger: RunLogger | None = None,
 ) -> RunReport:
@@ -1171,6 +1172,14 @@ def run_monitor(
             skip, why = health.should_skip(
                 state.state if state else "HEALTHY", state.open_until if state else None
             )
+            # A person asking for a specific source is testing a fix. Refusing to try
+            # would mean nobody can verify a repair until the cooldown expires.
+            if skip and force:
+                skip, why = False, ""
+                log.info(
+                    "Circuito ignorado a pedido explícito",
+                    extra={"source_id": source.id, "stage": "circuit"},
+                )
             if skip:
                 log.info(
                     "Fonte %s ignorada: %s",
@@ -1226,7 +1235,12 @@ def run_monitor(
 
     report.finished_at = now()
     report.status = "PARTIAL" if (report.sources_failed or report.errors) else "SUCCESS"
-    if report.sources_attempted and report.sources_successful == 0:
+    attempted = report.sources_attempted - report.sources_skipped
+    if report.sources_attempted and report.sources_skipped == report.sources_attempted:
+        # Everything was deliberately skipped by the circuit breaker. Nothing failed and
+        # nothing was collected; calling that FAILED would make the watchdog cry wolf.
+        report.status = "SKIPPED"
+    elif attempted > 0 and report.sources_successful == 0:
         report.status = "FAILED"
     monitor.status = report.status
     monitor.finished_at = report.finished_at
@@ -1251,6 +1265,28 @@ def run_monitor(
     session.commit()
     log.info("Execução concluída: %s", report.status)
     return report
+
+
+def finalize_run(
+    session: Session,
+    config: Configuration,
+    secrets: Secrets,
+    report: RunReport,
+    logger: RunLogger,
+) -> Any:
+    """Evaluate the watchdog, queue any alert AND deliver it, in one place.
+
+    These three steps belong together: queueing without dispatching left the "your
+    monitoring is broken" alert waiting for the next run, which -- if monitoring really
+    is broken -- never comes. Keeping them in one function stops a caller doing half.
+    """
+    from sentinela import watchdog as watchdog_module
+
+    verdict = watchdog_module.evaluate(session, config)
+    watchdog_module.notify(session, verdict, config, secrets)
+    session.flush()
+    dispatch(session, config, secrets, report, logger)
+    return verdict
 
 
 def last_successful_run(session: Session, kind: str | None = None) -> MonitorRun | None:

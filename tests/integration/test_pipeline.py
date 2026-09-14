@@ -710,3 +710,73 @@ def test_critical_watchdog_keeps_repeating_daily(
     assert watchdog_module.notify(session, verdict, config, secrets) == 1
     session.commit()
     assert watchdog_module.notify(session, verdict, config, secrets) == 0
+
+
+def test_a_run_where_everything_was_skipped_is_not_a_failure(
+    session: Session, source: Source, config: Configuration, secrets: Secrets
+) -> None:
+    """Regression: a run whose sources were all deliberately skipped by the circuit
+    breaker reported FAILED. Nothing failed and nothing was collected -- calling that a
+    failure would make the watchdog cry wolf about a healthy system."""
+    from datetime import UTC as _UTC
+    from datetime import datetime as _datetime
+
+    from sentinela.models import SourceHealth
+    from sentinela.pipeline import run_monitor
+
+    state = session.get(SourceHealth, source.id)
+    state.state = "OPEN"
+    state.open_until = _datetime(2099, 1, 1, tzinfo=_UTC)
+    session.commit()
+
+    result = run_monitor(session, config, secrets, kind="manual", only=[source.id])
+    assert result.sources_skipped == 1
+    assert result.sources_failed == 0
+    assert result.status == "SKIPPED"
+
+
+def test_force_lets_an_operator_test_a_repair_before_the_cooldown(
+    session: Session, source: Source, config: Configuration, secrets: Secrets
+) -> None:
+    """Regression: the runbook says to use `source-check` to reproduce a broken source,
+    but the circuit breaker silently refused, so a fix could not be verified for hours."""
+    from datetime import UTC as _UTC
+    from datetime import datetime as _datetime
+
+    from sentinela.models import SourceHealth
+    from sentinela.pipeline import run_monitor
+
+    state = session.get(SourceHealth, source.id)
+    state.state = "OPEN"
+    state.open_until = _datetime(2099, 1, 1, tzinfo=_UTC)
+    session.commit()
+
+    result = run_monitor(
+        session, config, secrets, kind="manual", only=[source.id], force=True, dry_run=True
+    )
+    assert result.sources_skipped == 0
+    assert result.sources_attempted == 1
+
+
+def test_watchdog_alert_is_not_left_queued(
+    session: Session, config: Configuration, secrets: Secrets
+) -> None:
+    """Regression: the alert was queued but never dispatched, so 'your monitoring is
+    broken' waited for the NEXT run -- which, if monitoring really is broken, never
+    arrives. finalize_run keeps queueing and delivering together."""
+    from sentinela.logging import RunLogger, get
+    from sentinela.pipeline import finalize_run
+
+    report = RunReport(run_id=RUN_ID)
+    verdict = finalize_run(session, config, secrets, report, RunLogger(get("test"), {}))
+    session.commit()
+
+    assert verdict.severity == "CRITICAL"
+    rows = (
+        session.execute(sa.select(Notification).where(Notification.category == "SYSTEM"))
+        .scalars()
+        .all()
+    )
+    assert rows, "o watchdog deveria ter gerado alerta"
+    assert all(row.status == "SENT" for row in rows)
+    assert report.notifications_sent == len(rows)

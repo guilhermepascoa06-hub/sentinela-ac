@@ -39,7 +39,7 @@ from sentinela.models import (
     Source,
     SourceHealth,
 )
-from sentinela.pipeline import run_is_fresh, run_monitor, utc_schedule
+from sentinela.pipeline import finalize_run, run_is_fresh, run_monitor, utc_schedule
 from sentinela.registry import load_registry, sync
 
 app = typer.Typer(
@@ -68,6 +68,10 @@ def run(
     kind: Annotated[str, typer.Option(help="daily | backup | manual")] = "daily",
     trigger: Annotated[str, typer.Option(help="Origem da execução.")] = "manual",
     dry_run: Annotated[bool, typer.Option(help="Coleta sem gravar nem notificar.")] = False,
+    force: Annotated[
+        bool,
+        typer.Option(help="Coletar mesmo com o circuito aberto (para testar um conserto)."),
+    ] = False,
     skip_if_fresh: Annotated[
         bool,
         typer.Option(
@@ -120,12 +124,12 @@ def run(
                 kind=kind,
                 trigger=trigger,
                 only=only or None,
+                force=force,
                 dry_run=dry_run,
                 logger=logger,
             )
         with session_scope(factory) as session:
-            verdict = watchdog_module.evaluate(session, config)
-            watchdog_module.notify(session, verdict, config, secrets)
+            finalize_run(session, config, secrets, result, logger)
             path = report_module.write(session, config)
 
     table = Table(title=f"Execução {result.status}", show_header=False)
