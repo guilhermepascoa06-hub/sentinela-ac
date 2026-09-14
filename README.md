@@ -316,7 +316,7 @@ escreve no banco; uma frase nunca dispara gravação.
 | Workflow | Quando | O quê |
 |---|---|---|
 | `daily-monitor.yml` | 07:17 e 08:17 (Rio Branco) | coleta; a segunda só assume se a primeira faltou ou falhou |
-| `telegram-bot.yml` | a cada 10 min, escutando 9 | fica ouvindo o Telegram e responde em segundos |
+| `telegram-bot.yml` | turnos de ~6h, encadeados | fica ouvindo o Telegram e responde em segundos |
 | `weekly-deep-audit.yml` | domingo 06:43 | revalida fontes, reprocessa pendências, descobre fontes novas |
 | `database-backup.yml` | 03:07 | backup + verificação + teste de restauração |
 | `ci.yml` | push e PR | lint, tipos, migrations, testes, checagem de segredos |
@@ -460,8 +460,9 @@ redigidas antes de qualquer linha ser escrita.
 | **Total** | **R$ 0/mês** | |
 
 O repositório é **público**, e repositório público não tem teto de minutos no Actions.
-Foi isso que permitiu o bot deixar de responder de hora em hora: cada turno escuta 9
-minutos e o cron abre um turno a cada 10, então na prática há sempre um ouvinte.
+Foi isso que permitiu o bot deixar de responder de hora em hora: cada turno fica escutando
+por quase 6 horas (o teto de um job) e termina sozinho, com o próximo assumindo em
+seguida — então na prática há sempre um ouvinte.
 
 Enquanto o repositório era privado, o teto de 2.000 minutos/mês obrigava a checar o
 Telegram uma vez por hora — a conta está no comentário de `telegram-bot.yml`, junto com o

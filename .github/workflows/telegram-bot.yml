@@ -1,18 +1,30 @@
 name: Responder no Telegram
 
+# O bot fica escutando. Cada turno faz long polling por quase 6 horas -- o teto de um job
+# no GitHub -- e termina sozinho; o grupo de concorrencia garante um unico ouvinte, porque
+# dois getUpdates ao mesmo tempo recebem 409 da API do Telegram.
+#
+# Sao tres gatilhos de proposito, e o motivo e medido, nao teorico: o agendador do GitHub
+# nunca disparou este workflow desde que ele foi criado, enquanto disparou o monitor e o
+# backup normalmente. Entao o cron nao pode ser a unica forma de o bot voltar a ouvir.
+#
+#   schedule      -- a cada 30 min. Quando funciona, um turno morto e substituido rapido.
+#   workflow_run  -- quando o monitor, o backup ou a auditoria terminam. Esses tres ja
+#                    disparam de verdade, e cada um deles rende quase 6 horas de escuta.
+#   dispatch      -- para religar na hora, sem esperar nada.
+#
+# Uma execucao que chega com o grupo ocupado fica pendente e assume assim que o turno atual
+# acaba, entao a troca de turno nao abre buraco. E o que perde a vez nao perde mensagem: o
+# Telegram guarda por 24h tudo que nao foi confirmado.
 on:
   schedule:
-    # A cada 10 minutos, e cada turno fica escutando 9 -- entao na pratica o bot esta
-    # sempre ouvindo e responde em segundos, nao de hora em hora.
-    #
-    # A cadencia antiga era de 1 em 1 hora por causa de dinheiro: o GitHub cobra minuto
-    # arredondado para cima e o limite do plano gratuito era 2.000/mes. Esse motivo
-    # morreu quando o repositorio virou publico -- repo publico nao tem teto de minutos.
-    #
-    # Se um turno atrasar ou morrer, nada se perde: o Telegram guarda por 24h tudo que
-    # nao foi confirmado, e o turno seguinte responde. O grupo de concorrencia garante
-    # um unico ouvinte por vez (dois getUpdates simultaneos recebem 409 da API).
-    - cron: '*/10 * * * *'
+    - cron: '*/30 * * * *'
+  workflow_run:
+    workflows:
+      - Monitoramento diário
+      - Backup do banco
+      - Auditoria semanal
+    types: [completed]
   workflow_dispatch:
 
 concurrency:
@@ -25,7 +37,9 @@ permissions:
 jobs:
   responder:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # O teto de um job e 6h. O turno para em 340 min para terminar por decisao propria,
+    # nunca por execucao morta no meio de uma resposta.
+    timeout-minutes: 350
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -45,4 +59,4 @@ jobs:
           pip install -e . --no-deps
           pip install sqlalchemy psycopg[binary] pydantic pydantic-settings httpx pyyaml typer rich tzdata alembic
       - name: Escutar e responder
-        run: sentinela bot --watch --minutes 9
+        run: sentinela bot --watch --minutes 340

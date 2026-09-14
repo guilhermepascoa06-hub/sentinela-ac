@@ -54,7 +54,7 @@ campo contra o PDF oficial de 56 páginas.
 | Workflow | Quando | O quê |
 |---|---|---|
 | `daily-monitor.yml` | 07:17 e 08:17 (Rio Branco) | coleta; a segunda só age se a primeira faltou |
-| `telegram-bot.yml` | a cada 10 min, escutando 9 | responde em segundos; sem teto porque o repo é público |
+| `telegram-bot.yml` | turnos de 340 min, encadeados | responde em segundos; três gatilhos porque o cron sozinho não dispara |
 | `database-backup.yml` | 03:07 | dump + verificação + teste de restauração |
 | `weekly-deep-audit.yml` | domingo 06:43 | revalida fontes, reprocessa pendências, descobre fontes |
 | `ci.yml` | push e PR | lint, format, mypy, bandit, migrations up/down/check, testes em PG |
@@ -171,9 +171,15 @@ Cada linha aqui custou um bug real em produção. Há teste travando todas.
 28. **Só comando escreve.** Nenhuma frase em texto livre dispara gravação, porque mensagem
     recebida é dado, nunca instrução (invariante 9). O modelo lê o acompanhamento no
     briefing, rotulado como anotação pessoal, e não tem como alterá-lo.
-29. **O turno de escuta acaba sozinho.** Um job de nuvem tem teto de duração; `--minutes`
-    existe para o turno terminar antes e o próximo assumir. Escutar mais que o intervalo do
-    cron põe dois `getUpdates` no ar e o segundo leva 409. Há teste travando os dois.
+29. **O turno de escuta acaba sozinho.** Um job de nuvem tem teto de 6h; `--minutes 340`
+    existe para o turno terminar por decisão própria e o próximo assumir. Quem garante um
+    ouvinte só é o grupo de concorrência, não o relógio: dois `getUpdates` simultâneos
+    levam 409. Há teste travando isso.
+30. **O cron não é o único gatilho, e isso foi medido.** O agendador do GitHub nunca
+    disparou `telegram-bot.yml` desde que ele existe, enquanto disparava o monitor e o
+    backup. Por isso o workflow também escuta o `workflow_run` dos três agendados que
+    comprovadamente rodam. O gatilho reserva casa pelo **nome** do workflow: renomear um
+    deles calaria o bot em silêncio, e há teste travando isso.
 
 ### Apresentação
 
