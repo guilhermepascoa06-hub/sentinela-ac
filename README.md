@@ -267,8 +267,8 @@ sentinela bot --watch              # responde no Telegram em segundos
 
 ## Perguntas no Telegram
 
-O bot responde **sem depender de IA**. Ele só usa o que está gravado; quando não sabe, diz
-que não sabe.
+É aqui que o sistema fala com você. O bot fica escutando: você manda e ele responde em
+segundos, não na virada da hora.
 
 | Comando | O que faz |
 |---|---|
@@ -280,11 +280,31 @@ que não sabe.
 | `/status` | se o monitoramento está vivo |
 | `/fontes` | quais portais estão com problema |
 
+E o que ele guarda sobre **você**:
+
+| Comando | O que faz |
+|---|---|
+| `/meus` | o que você acompanha, com o próximo passo de cada um |
+| `/salvar CÓDIGO` | ficar de olho neste cargo |
+| `/inscrito CÓDIGO` | marcar que você já se inscreveu |
+| `/nota CÓDIGO texto` | guardar uma observação sua |
+| `/descartar CÓDIGO` | parar de receber os prazos deste cargo |
+| `/esquecer CÓDIGO` | tirar da sua lista |
+
 Cada resultado traz um código curto (`#048e6507`) que continua valendo quando o ranking
-muda — é ele que você usa em `/cargo` e `/historico`. Texto livre também funciona ("qual o
-salário do agente legislativo?"): a resposta sai do banco, e o modelo só entra quando a
-pergunta não é factual. Quando o termo casa com mais de um cargo, o bot mostra as opções em
-vez de escolher por você.
+muda — é ele que você usa nos comandos, com ou sem o `#`.
+
+**O que você marca é anotação sua, nunca fato oficial.** Marcar "me inscrevi" não muda o
+status do certame, não cria versão e não vira evidência: muda só o que o sistema fala com
+você. Certame que você descartou por inteiro para de gerar lembrete de prazo, e os
+lembretes que sobram passam a dizer o que você já marcou.
+
+**Texto livre também funciona.** "Vale a pena tentar o agente legislativo?", "o que eu
+ainda preciso fazer antes do prazo?", "qual a diferença entre os dois?". O modelo recebe o
+caso inteiro — data de hoje, seu filtro, os cargos que a pergunta cita (mesmo fora do
+filtro), os prazos e o que você marcou — e pode comparar, resumir e recomendar. O que ele
+não pode é inventar: se o dado não está registrado, ele diz que não está. Só comando
+escreve no banco; uma frase nunca dispara gravação.
 
 ---
 
@@ -293,7 +313,7 @@ vez de escolher por você.
 | Workflow | Quando | O quê |
 |---|---|---|
 | `daily-monitor.yml` | 07:17 e 08:17 (Rio Branco) | coleta; a segunda só assume se a primeira faltou ou falhou |
-| `telegram-bot.yml` | de hora em hora | responde as mensagens que você mandou no Telegram |
+| `telegram-bot.yml` | a cada 10 min, escutando 9 | fica ouvindo o Telegram e responde em segundos |
 | `weekly-deep-audit.yml` | domingo 06:43 | revalida fontes, reprocessa pendências, descobre fontes novas |
 | `database-backup.yml` | 03:07 | backup + verificação + teste de restauração |
 | `ci.yml` | push e PR | lint, tipos, migrations, testes, checagem de segredos |
@@ -311,7 +331,7 @@ com `SUCCESS` hoje, ela sai em segundos. Se estiver `MISSING`, `FAILED`, `PARTIA
 ## Testes
 
 ```bash
-pytest                                  # suíte completa (337 testes)
+pytest                                  # suíte completa (328 testes)
 pytest tests/golden -v                  # contra um edital real publicado
 TEST_DATABASE_URL=postgresql+psycopg://... pytest   # integração no PostgreSQL de verdade
 ```
@@ -431,27 +451,18 @@ redigidas antes de qualquer linha ser escrita.
 | Item | Custo | Consumo |
 |---|---|---|
 | Supabase Free | **R$ 0** | 17 MB de 500 |
-| GitHub Actions | **R$ 0** | ~1.224 de 2.000 min/mês |
+| GitHub Actions | **R$ 0** | sem teto: repositório público |
 | Telegram Bot API | **R$ 0** | sem limite prático |
 | Gemini free tier | **R$ 0** | poucas chamadas/dia, com cache |
 | **Total** | **R$ 0/mês** | |
 
-O único recurso com folga apertada são os minutos do Actions, e o motivo é o bot do
-Telegram: o GitHub **arredona para cima por execução**, então cada checagem custa 1 minuto
-inteiro mesmo levando 45 segundos.
+O repositório é **público**, e repositório público não tem teto de minutos no Actions.
+Foi isso que permitiu o bot deixar de responder de hora em hora: cada turno escuta 9
+minutos e o cron abre um turno a cada 10, então na prática há sempre um ouvinte.
 
-```
-a cada 30 min   1.440/mês + 504 dos outros = 1.944 de 2.000   sem folga para o CI
-de hora em hora   720/mês + 504 dos outros = 1.224 de 2.000   com folga
-```
-
-Por isso o padrão é de hora em hora. Duas formas de ter resposta imediata sem pagar nada:
-
-- `sentinela bot --watch` na sua máquina faz long polling e responde em segundos, sem
-  gastar minuto nenhum do Actions;
-- tornar o repositório **público** dá minutos **ilimitados**. Nada sensível vive aqui — os
-  segredos estão em GitHub Secrets e o `.env` nunca entra no Git — mas essa é uma decisão
-  sua, porque o código passa a ser visível para qualquer pessoa.
+Enquanto o repositório era privado, o teto de 2.000 minutos/mês obrigava a checar o
+Telegram uma vez por hora — a conta está no comentário de `telegram-bot.yml`, junto com o
+motivo de ela não valer mais.
 
 Projeto Supabase gratuito **pausa após 7 dias sem atividade**. As execuções diárias contam
 como atividade, então na prática ele não pausa. Se ficar semanas parado, é só despausar no

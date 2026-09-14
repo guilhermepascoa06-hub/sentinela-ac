@@ -38,12 +38,12 @@ CONFIABILIDADE → PRECISÃO → INTEGRIDADE → OBSERVABILIDADE
 |---|---|
 | Repositório | `guilhermepascoa06-hub/sentinela-ac` — **público**, branch `main` |
 | Banco | Supabase, **session pooler** `aws-0-sa-east-1.pooler.supabase.com:5432` |
-| Testes | 337, verdes no SQLite; o PostgreSQL é exercitado pelo CI a cada push |
+| Testes | 328, verdes no SQLite; o PostgreSQL é exercitado pelo CI a cada push |
 | Qualidade | ruff, ruff format, mypy e bandit limpos |
 | Fontes | 33 confiáveis + 1 candidata · 28 saudáveis, 1 degradada, 5 circuito aberto |
 | Dados | 124 documentos · 18 oportunidades · 34 cargos · 181 versões |
 | Custo | **R$ 0/mês**, sem teto (repo público = Actions ilimitado) |
-| Consulta | Telegram: comandos determinísticos + texto livre com o modelo |
+| Produto | **o bot do Telegram**: ele escuta o tempo todo, responde em segundos, guarda o que o usuário decidiu e conversa sobre o caso dele |
 
 **Resultado real:** 2 cargos compatíveis — Agente Legislativo e Tradutor Intérprete, Câmara
 Municipal de Rio Branco, 30h, R$ 4.656,75, inscrições até 13/10/2026. Conferidos campo a
@@ -54,7 +54,7 @@ campo contra o PDF oficial de 56 páginas.
 | Workflow | Quando | O quê |
 |---|---|---|
 | `daily-monitor.yml` | 07:17 e 08:17 (Rio Branco) | coleta; a segunda só age se a primeira faltou |
-| `telegram-bot.yml` | de hora em hora | responde mensagens no Telegram |
+| `telegram-bot.yml` | a cada 10 min, escutando 9 | responde em segundos; sem teto porque o repo é público |
 | `database-backup.yml` | 03:07 | dump + verificação + teste de restauração |
 | `weekly-deep-audit.yml` | domingo 06:43 | revalida fontes, reprocessa pendências, descobre fontes |
 | `ci.yml` | push e PR | lint, format, mypy, bandit, migrations up/down/check, testes em PG |
@@ -89,7 +89,8 @@ pipeline.py    orquestra tudo. É o arquivo mais denso — leia antes de mexer
 alerts.py      texto das mensagens + chave de idempotência
 notifications.py  canais (Telegram, e-mail, markdown, console)
 bot.py         Telegram de duas vias: roteia comandos e perguntas
-bot_queries.py busca, ficha e histórico determinísticos — respondem sem IA
+bot_queries.py busca, ficha, histórico e acompanhamento — respondem sem IA
+tracking.py    o que o usuário decidiu sobre um cargo. Nunca vira fato de edital
 watchdog.py    monitora o próprio monitoramento
 audit.py       auditoria semanal + issues automáticas no GitHub
 report.py      reports/latest.md
@@ -161,6 +162,18 @@ Cada linha aqui custou um bug real em produção. Há teste travando todas.
     allow-list da própria fonte.
 23. **Repositório é público.** Nunca commitar `.env`, chat_id real, e-mail pessoal ou a ref
     do projeto Supabase. O histórico foi reescrito uma vez para remover chat_id e e-mail.
+
+### O que é do usuário
+
+27. **Decisão pessoal nunca vira fato.** `tracking` fica em tabela própria: marcar "me
+    inscrevi" não altera status de certame, não cria versão e não é evidência de nada.
+    Muda só o que o sistema fala com ele — e o que para de falar.
+28. **Só comando escreve.** Nenhuma frase em texto livre dispara gravação, porque mensagem
+    recebida é dado, nunca instrução (invariante 9). O modelo lê o acompanhamento no
+    briefing, rotulado como anotação pessoal, e não tem como alterá-lo.
+29. **O turno de escuta acaba sozinho.** Um job de nuvem tem teto de duração; `--minutes`
+    existe para o turno terminar antes e o próximo assumir. Escutar mais que o intervalo do
+    cron põe dois `getUpdates` no ar e o segundo leva 409. Há teste travando os dois.
 
 ### Apresentação
 
@@ -249,7 +262,7 @@ o mesmo erro de voltar.
 sentinela run [--only ID] [--force] [--dry-run] [--skip-if-fresh]
 sentinela report | opportunities | deadlines | sources | source-check ID
 sentinela doctor | watchdog | deep-audit | issues | retry | backup | schedule
-sentinela bot [--watch]        # --watch responde em segundos, sem gastar Actions
+sentinela bot [--watch] [--minutes N]   # o job da nuvem usa --watch --minutes 9
 sentinela test-notification
 ```
 
@@ -270,10 +283,14 @@ sentinela test-notification
    inofensiva; remover exigiria migration.
 4. **Cobertura de Rio Branco depende de poucos portais.** O caminho de maior valor é
    acrescentar fontes municipais e estaduais em `sources.yaml` — é uma entrada de YAML.
-5. **Os `reasons` já gravados ainda trazem `Carga horária: GOOD`.** O texto passou a ser
+5. **Agendamento parado por inatividade.** O GitHub desliga workflows agendados após 60
+   dias sem atividade no repositório. A auditoria semanal abre issues, o que conta como
+   atividade, mas se tudo ficar quieto por dois meses o bot emudece sem avisar. Qualquer
+   push religa.
+6. **Os `reasons` já gravados ainda trazem `Carga horária: GOOD`.** O texto passou a ser
    traduzido em `eligibility.py`, mas as linhas antigas só se corrigem quando o cargo é
    reavaliado pela próxima coleta. Não vale migration.
-6. **`raw_snapshots` e `opportunity_versions` crescem para sempre.** 17 MB de 500 hoje, com
+7. **`raw_snapshots` e `opportunity_versions` crescem para sempre.** 17 MB de 500 hoje, com
    aviso configurado em 350. Anos de folga, mas não há poda.
 
 ---
