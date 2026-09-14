@@ -18,6 +18,31 @@ FIXTURES = Path(__file__).parent / "fixtures"
 TODAY = date(2026, 9, 14)
 
 
+def validate_test_database_url(value: str) -> str:
+    """Reject a remote/production database before destructive test fixtures connect."""
+    try:
+        url = sa.engine.make_url(value)
+    except (sa.exc.ArgumentError, ValueError):
+        raise pytest.UsageError("TEST_DATABASE_URL is not a valid test database URL") from None
+    if url.get_backend_name() == "sqlite":
+        return value
+    # Fixtures drop every application table. Never allow Supabase or any remote host,
+    # even when a production connection string was accidentally copied into TEST_*.
+    # Query parameters can override libpq host/dbname, so none are accepted here.
+    if (
+        url.get_backend_name() != "postgresql"
+        or url.host not in {"localhost", "127.0.0.1", "::1"}
+        or not url.database
+        or not url.database.endswith("_test")
+        or url.query
+    ):
+        raise pytest.UsageError(
+            "TEST_DATABASE_URL must use SQLite or a disposable loopback PostgreSQL "
+            "database ending in '_test', without URL query parameters; fixtures drop tables"
+        )
+    return value
+
+
 @pytest.fixture(scope="session")
 def database_url() -> str:
     """PostgreSQL when TEST_DATABASE_URL is set, SQLite otherwise.
@@ -25,7 +50,8 @@ def database_url() -> str:
     The schema is dialect-portable on purpose so the fast unit suite needs no server,
     while CI still exercises the real database the system runs on.
     """
-    return os.environ.get("TEST_DATABASE_URL") or "sqlite+pysqlite:///:memory:"
+    value = os.environ.get("TEST_DATABASE_URL") or "sqlite+pysqlite:///:memory:"
+    return validate_test_database_url(value)
 
 
 @pytest.fixture
