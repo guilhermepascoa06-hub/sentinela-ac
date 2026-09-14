@@ -391,3 +391,29 @@ def test_fingerprint_ignores_content_and_tracks_structure() -> None:
 def test_parser_rate_handles_zero_attempts() -> None:
     assert health.parser_rate(0, 0) == 0.0
     assert health.parser_rate(3, 4) == 0.75
+
+
+def test_ocr_finds_tessdata_without_the_env_var(monkeypatch, tmp_path) -> None:
+    """Regression: the OCR guard only read TESSDATA_PREFIX, which installing
+    `tesseract-ocr` does not set. OCR therefore never ran and scanned editais stayed
+    unreadable forever."""
+    from sentinela import extract as extract_module
+
+    data = tmp_path / "tessdata"
+    data.mkdir()
+    (data / "por.traineddata").write_bytes(b"x")
+
+    monkeypatch.delenv("TESSDATA_PREFIX", raising=False)
+    monkeypatch.setattr(extract_module, "_TESSDATA_CANDIDATES", (str(data),))
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/tesseract")
+    assert extract_module.tessdata_path() == str(data)
+
+    monkeypatch.setattr("shutil.which", lambda name: None)
+    assert extract_module.tessdata_path() is None
+
+
+def test_explicit_tessdata_prefix_still_wins(monkeypatch, tmp_path) -> None:
+    from sentinela import extract as extract_module
+
+    monkeypatch.setenv("TESSDATA_PREFIX", str(tmp_path))
+    assert extract_module.tessdata_path() == str(tmp_path)

@@ -145,21 +145,62 @@ def _pypdf(content: bytes) -> ExtractedDocument:
     )
 
 
+# Where Debian/Ubuntu, Homebrew and the Windows installer put the language data.
+_TESSDATA_CANDIDATES = (
+    "/usr/share/tesseract-ocr/5/tessdata",
+    "/usr/share/tesseract-ocr/4.00/tessdata",
+    "/usr/share/tesseract-ocr/tessdata",
+    "/usr/share/tessdata",
+    "/opt/homebrew/share/tessdata",
+    "/usr/local/share/tessdata",
+    r"C:\Program Files\Tesseract-OCR\tessdata",
+)
+
+
+def tessdata_path() -> str | None:
+    """Locate the Tesseract language data.
+
+    PyMuPDF only reads TESSDATA_PREFIX from the environment, and installing
+    `tesseract-ocr` from a package manager does not set it. Relying on the variable alone
+    meant OCR silently never ran, and scanned editais (the CNU retifications are exactly
+    that: one page, no text layer, two images) stayed unreadable forever.
+    """
+    import os
+    from pathlib import Path as _Path
+    from shutil import which
+
+    declared = os.environ.get("TESSDATA_PREFIX")
+    if declared and _Path(declared).is_dir():
+        return declared
+    if which("tesseract") is None:
+        return None
+    for candidate in _TESSDATA_CANDIDATES:
+        path = _Path(candidate)
+        if path.is_dir() and any(path.glob("*.traineddata")):
+            return str(path)
+    return None
+
+
 def _ocr(content: bytes, max_pages: int) -> ExtractedDocument:
-    """Scanned editais only. Skipped silently when Tesseract is not installed."""
+    """Scanned editais only. Skipped cleanly when Tesseract is not installed."""
     try:
         import pymupdf
     except ImportError:  # pragma: no cover
         return ExtractedDocument(method="ocr", status="UNAVAILABLE")
+    tessdata = tessdata_path()
+    if not tessdata:
+        return ExtractedDocument(
+            method="ocr", status="UNAVAILABLE", detail="Tesseract nao instalado"
+        )
     try:
         with pymupdf.open(stream=content, filetype="pdf") as document:
-            if not getattr(pymupdf, "TESSDATA_PREFIX", None):
-                return ExtractedDocument(
-                    method="ocr", status="UNAVAILABLE", detail="Tesseract nao instalado"
-                )
             chunks = []
             for page in list(document)[:max_pages]:
-                chunks.append(page.get_textpage_ocr(language="por", full=True).extractText())
+                chunks.append(
+                    page.get_textpage_ocr(
+                        language="por", tessdata=tessdata, full=True
+                    ).extractText()
+                )
             count = document.page_count
     except Exception as error:  # noqa: BLE001
         return ExtractedDocument(method="ocr", status="PARSER_ERROR", detail=type(error).__name__)
