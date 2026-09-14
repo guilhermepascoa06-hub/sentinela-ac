@@ -40,6 +40,89 @@ INACTIVE_STATUSES = {"CANCELLED", "SUSPENDED", "HOMOLOGATED", "EXPIRED"}
 MAX_REPLY = 3_900
 
 
+# Palavras que nunca ajudam a identificar o cargo de que a pergunta fala.
+STOPWORDS = {
+    "qual",
+    "quais",
+    "quanto",
+    "quantos",
+    "quando",
+    "onde",
+    "como",
+    "que",
+    "o",
+    "a",
+    "os",
+    "as",
+    "e",
+    "do",
+    "da",
+    "dos",
+    "das",
+    "de",
+    "em",
+    "no",
+    "na",
+    "para",
+    "por",
+    "um",
+    "uma",
+    "tem",
+    "ter",
+    "precisa",
+    "preciso",
+    "sao",
+    "sera",
+    "ser",
+    "saber",
+    "salario",
+    "salarios",
+    "ganha",
+    "remuneracao",
+    "requisitos",
+    "requisito",
+    "jornada",
+    "horas",
+    "prova",
+    "taxa",
+    "isencao",
+    "lotacao",
+    "inscricao",
+    "data",
+    "valor",
+    "cargo",
+    "me",
+    "diga",
+    "favor",
+    "quero",
+    "semanal",
+    "semanas",
+    "semana",
+    "pagar",
+    "vale",
+    "pena",
+    "acha",
+    "melhor",
+    "sobre",
+    "concurso",
+    "concursos",
+    "cargos",
+    "voce",
+    "eu",
+    "meu",
+    "minha",
+    "diferenca",
+    "entre",
+    "mais",
+    "menos",
+    "posso",
+    "devo",
+    "fazer",
+    "ultimo",
+    "ultima",
+}
+
+
 def today(config: Configuration) -> date:
     return now().astimezone(config.zone).date()
 
@@ -351,66 +434,7 @@ def answer_question(session: Session, config: Configuration, question: str) -> s
         )
     ):
         return None
-    stop = {
-        "qual",
-        "quais",
-        "quanto",
-        "quantos",
-        "quando",
-        "onde",
-        "como",
-        "que",
-        "o",
-        "a",
-        "os",
-        "as",
-        "e",
-        "do",
-        "da",
-        "dos",
-        "das",
-        "de",
-        "em",
-        "no",
-        "na",
-        "para",
-        "por",
-        "um",
-        "uma",
-        "tem",
-        "ter",
-        "precisa",
-        "preciso",
-        "sao",
-        "sera",
-        "ser",
-        "saber",
-        "salario",
-        "salarios",
-        "ganha",
-        "remuneracao",
-        "requisitos",
-        "requisito",
-        "jornada",
-        "horas",
-        "prova",
-        "taxa",
-        "isencao",
-        "lotacao",
-        "inscricao",
-        "data",
-        "valor",
-        "cargo",
-        "me",
-        "diga",
-        "favor",
-        "quero",
-        "semanal",
-        "semanas",
-        "semana",
-        "pagar",
-    }
-    term = " ".join(word for word in normalized.split() if word not in stop)
+    term = " ".join(word for word in normalized.split() if word not in STOPWORDS)
     if term:
         return answer_card(session, config, term)
     rows = [
@@ -539,3 +563,29 @@ def answer_followed(session: Session, config: Configuration) -> str:
         parts.append(f"Descartados ({len(dropped)}): {nomes}. Não aviso mais sobre eles.")
     parts.append("Mudar: /salvar CÓDIGO · /inscrito CÓDIGO · /esquecer CÓDIGO")
     return _truncate("\n\n".join(parts), MAX_REPLY)
+
+
+def relevant(session: Session, question: str, limit: int = 6) -> list[Pair]:
+    """Cargos que a pergunta parece mencionar.
+
+    Sem isto o modelo só enxergava os compatíveis e respondia "não tenho essa informação"
+    para qualquer pergunta sobre um cargo fora do filtro, que está guardado e citável.
+    """
+    term = " ".join(word for word in normalize(question).split() if word not in STOPWORDS)
+    if not term:
+        return []
+    rows = _rows(session, term)
+    if not rows:
+        # "vale a pena o tradutor?" tem uma palavra que identifica alguma coisa; "qual a
+        # diferenca entre o agente e o analista" tem duas, e parar na primeira fazia o
+        # modelo responder que o segundo cargo nao estava registrado.
+        seen: set[str] = set()
+        rows = []
+        for word in term.split():
+            if len(word) < 4:
+                continue
+            for pair in _rows(session, word):
+                if pair[1].id not in seen:
+                    seen.add(pair[1].id)
+                    rows.append(pair)
+    return rows[:limit]

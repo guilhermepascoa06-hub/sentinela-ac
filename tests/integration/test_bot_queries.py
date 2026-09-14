@@ -439,3 +439,58 @@ def test_marking_needs_an_unambiguous_cargo_instead_of_picking_one(
     reply = ask(session, config, "/salvar agente legislativo")
     assert "Escolha pelo nome completo ou pelo código" in reply
     assert "ainda não está acompanhando" in ask(session, config, "/meus")
+
+
+# ---------------------------------------------------------------- contexto do modelo
+
+
+def test_the_model_sees_the_cargo_the_question_names_even_outside_the_filter(
+    session: Session, config: Configuration
+) -> None:
+    """O contexto só tinha os compatíveis, então perguntar sobre um cargo guardado fora do
+    filtro recebia "não tenho essa informação" sobre um dado que está no banco."""
+    cargo(session, "Analista Legislativo", eligible=False)
+    found = bot_queries.relevant(session, "vale a pena o analista legislativo?")
+    assert [position.name for _opportunity, position in found] == ["Analista Legislativo"]
+
+
+def test_conversation_words_do_not_break_the_search(
+    session: Session, config: Configuration
+) -> None:
+    cargo(session)
+    assert bot_queries.relevant(session, "o que você acha do agente legislativo")
+    assert bot_queries.relevant(session, "me fala sobre esse concurso da câmara")
+
+
+def test_a_question_about_nothing_in_the_base_finds_nothing(
+    session: Session, config: Configuration
+) -> None:
+    cargo(session)
+    assert bot_queries.relevant(session, "quanto custa uma passagem para o japão") == []
+
+
+def test_the_briefing_carries_dates_deadlines_and_his_own_decisions(
+    session: Session, config: Configuration
+) -> None:
+    opportunity, position = cargo(session)
+    session.add(
+        Deadline(
+            opportunity_id=opportunity.id,
+            kind="registration",
+            due_date=TODAY + timedelta(days=30),
+            description="Encerramento das inscrições",
+            active=True,
+            updated_at=STAMP,
+        )
+    )
+    session.flush()
+    ask(session, config, f"/inscrito {position.id[:8]}")
+    ask(session, config, f"/nota {position.id[:8]} pagar a taxa")
+    briefing = bot.context_for_model(session, config, "e agora, o que eu faço?")
+    assert "HOJE: 14/09/2026" in briefing
+    assert "FILTRO DELE" in briefing
+    assert "Encerramento das inscrições" in briefing
+    assert "inscrição feita" in briefing
+    assert "pagar a taxa" in briefing
+    # O modelo precisa saber que isso é anotação dele, não fato de edital.
+    assert "nao e fato de edital" in briefing
