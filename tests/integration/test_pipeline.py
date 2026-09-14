@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
+import httpx
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
@@ -793,10 +794,13 @@ def test_a_transient_provider_failure_is_never_cached(
     from sentinela.models import ExtractionResult
     from sentinela.pipeline import _locate_missing_position_fields, _semantic_pending
 
+    asked: list[str] = []
+
     class Broken:
         name, model, model_version = "broken", "gemini-3.5-flash", "gemini-3.5-flash"
 
         def complete(self, prompt: str, document: str) -> str:
+            asked.append(document)
             raise httpx.HTTPStatusError(
                 "503",
                 request=httpx.Request("POST", "https://x"),
@@ -811,6 +815,7 @@ def test_a_transient_provider_failure_is_never_cached(
     result = _locate_missing_position_fields(session, draft_item, found_document, config, Broken())
     session.commit()
 
+    assert asked, "o provedor precisa ter sido realmente consultado"
     assert result == {}
     assert (
         session.execute(_sa.select(_sa.func.count()).select_from(ExtractionResult)).scalar_one()
