@@ -261,3 +261,48 @@ def test_the_bot_path_does_not_drag_in_the_scraping_stack() -> None:
         importlib.import_module("sentinela.bot")
     finally:
         builtins.__import__ = real
+
+
+def test_the_menu_and_the_router_describe_the_same_bot() -> None:
+    """Um menu que oferece comando sem atendente, ou um comando que existe e ninguém
+    descobre, é o defeito de sempre aqui: a ponta final não ligada."""
+    from sentinela import bot
+
+    menu = {f"/{name}" for name, _descricao in bot.COMMAND_MENU}
+    atendidos = set(bot.COMMANDS) | set(bot.QUERY_COMMANDS) | {"/ajuda"}
+    assert menu == atendidos
+
+
+def test_every_command_in_the_menu_answers_something(
+    session: Session, source: Source, config: Configuration
+) -> None:
+    from sentinela import bot
+
+    for name, _descricao in bot.COMMAND_MENU:
+        reply = route(session, config, Secrets(_env_file=None), f"/{name}")
+        assert reply, f"/{name} respondeu vazio"
+        assert "Comando não reconhecido" not in reply, f"/{name} está no menu e não é atendido"
+
+
+def test_the_menu_is_published_and_a_failure_never_stops_the_bot(
+    bot_secrets: Secrets,
+) -> None:
+    from sentinela import bot
+
+    enviados: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/setMyCommands"):
+            enviados["commands"] = request.url.params.get("commands")
+            return httpx.Response(200, json={"ok": True, "result": True})
+        return httpx.Response(500, json={"ok": False})
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        assert bot.publish_menu(bot_secrets, client) is True
+    assert "vagas" in str(enviados["commands"])
+
+    def recusa(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, json={"ok": False, "description": "Too Many Requests"})
+
+    with httpx.Client(transport=httpx.MockTransport(recusa)) as client:
+        assert bot.publish_menu(bot_secrets, client) is False

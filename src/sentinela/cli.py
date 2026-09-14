@@ -567,7 +567,7 @@ def bot(
     ] = 0,
 ) -> None:
     """Responde as mensagens que chegaram no Telegram."""
-    from sentinela.bot import poll_once
+    from sentinela.bot import poll_once, publish_menu
 
     configure("INFO")
     config, secrets, engine = _context()
@@ -591,6 +591,8 @@ def bot(
             console.print("[dim]Nada novo para responder.[/dim]")
         return
 
+    if publish_menu(secrets):
+        console.print("[dim]Menu de comandos publicado no Telegram.[/dim]")
     console.print("[green]Escutando o Telegram. Ctrl+C encerra.[/green]")
     volta = 0
     # Um job na nuvem precisa terminar sozinho para o proximo turno assumir. O

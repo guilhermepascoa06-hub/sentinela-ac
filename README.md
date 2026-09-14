@@ -291,6 +291,9 @@ E o que ele guarda sobre **você**:
 | `/descartar CÓDIGO` | parar de receber os prazos deste cargo |
 | `/esquecer CÓDIGO` | tirar da sua lista |
 
+Os comandos aparecem no menu do Telegram (o botão `/` na conversa), com descrição — o
+bot publica essa lista sozinho toda vez que começa a escutar.
+
 Cada resultado traz um código curto (`#048e6507`) que continua valendo quando o ranking
 muda — é ele que você usa nos comandos, com ou sem o `#`.
 
@@ -331,7 +334,7 @@ com `SUCCESS` hoje, ela sai em segundos. Se estiver `MISSING`, `FAILED`, `PARTIA
 ## Testes
 
 ```bash
-pytest                                  # suíte completa (328 testes)
+pytest                                  # suíte completa (331 testes)
 pytest tests/golden -v                  # contra um edital real publicado
 TEST_DATABASE_URL=postgresql+psycopg://... pytest   # integração no PostgreSQL de verdade
 ```

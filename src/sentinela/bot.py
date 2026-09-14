@@ -14,6 +14,7 @@ Two rules govern everything here:
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -244,6 +245,18 @@ def answer_fontes(session: Session, config: Configuration) -> str:
     return "\n".join(parts)
 
 
+QUERY_COMMANDS: dict[str, Callable[[Session, Configuration, str], str]] = {
+    "/buscar": answer_search,
+    "/cargo": answer_card,
+    "/historico": answer_history,
+    "/nota": answer_note,
+    "/esquecer": answer_forget,
+    # O que ele decidiu sobre o cargo. Só comando faz isso: uma frase em texto livre não
+    # pode disparar escrita, porque mensagem recebida é dado, nunca instrução.
+    "/salvar": lambda s, c, t: answer_mark(s, c, t, "INTERESTED"),
+    "/inscrito": lambda s, c, t: answer_mark(s, c, t, "REGISTERED"),
+    "/descartar": lambda s, c, t: answer_mark(s, c, t, "DISMISSED"),
+}
 COMMANDS = {
     "/vagas": answer_vagas,
     "/meus": answer_followed,
@@ -417,26 +430,60 @@ def _call(client: httpx.Client, token: str, method: str, **params: Any) -> Any:
     return body.get("result")
 
 
+# O menu que o Telegram mostra ao tocar em "/". Sem isto, todo comando precisa ser
+# decorado ou procurado no /ajuda -- e um comando que ninguem lembra nao existe.
+COMMAND_MENU = (
+    ("vagas", "O que combina com você agora"),
+    ("meus", "O que você está acompanhando"),
+    ("prazos", "O que vence nos próximos dias"),
+    ("buscar", "Procurar cargo por nome ou órgão"),
+    ("cargo", "Ficha completa, com a evidência"),
+    ("historico", "Alterações oficiais do certame"),
+    ("salvar", "Ficar de olho neste cargo"),
+    ("inscrito", "Marcar que você já se inscreveu"),
+    ("nota", "Guardar uma observação sua"),
+    ("descartar", "Parar de avisar sobre este cargo"),
+    ("esquecer", "Tirar da sua lista"),
+    ("status", "Se o monitoramento está vivo"),
+    ("fontes", "Quais portais estão com problema"),
+    ("ajuda", "A lista completa"),
+)
+
+
+def publish_menu(secrets: Secrets, client: httpx.Client | None = None) -> bool:
+    """Registra os comandos no Telegram. Falhar aqui nunca impede de responder."""
+    token = secrets.telegram_bot_token.get_secret_value()
+    if not token:
+        return False
+    owned = client is None
+    active = client or httpx.Client(timeout=15)
+    try:
+        _call(
+            active,
+            token,
+            "setMyCommands",
+            commands=json.dumps(
+                [{"command": name, "description": what} for name, what in COMMAND_MENU],
+                ensure_ascii=False,
+            ),
+        )
+        return True
+    except (httpx.HTTPError, RuntimeError) as error:
+        logger.warning("Menu nao publicado: %s", type(error).__name__, extra={"stage": "bot"})
+        return False
+    finally:
+        if owned:
+            active.close()
+
+
 def route(session: Session, config: Configuration, secrets: Secrets, text: str) -> str:
     command = text.strip().split()[0].lower().split("@")[0] if text.strip() else ""
     if command in ("/start", "/ajuda", "/help"):
         return AJUDA
-    query_handlers: dict[str, Callable[[Session, Configuration, str], str]] = {
-        "/buscar": answer_search,
-        "/cargo": answer_card,
-        "/historico": answer_history,
-        "/nota": answer_note,
-        "/esquecer": answer_forget,
-        # O que ele decidiu sobre o cargo. Só comando faz isso: uma frase em texto livre
-        # não pode disparar escrita, porque mensagem recebida é dado, nunca instrução.
-        "/salvar": lambda s, c, t: answer_mark(s, c, t, "INTERESTED"),
-        "/inscrito": lambda s, c, t: answer_mark(s, c, t, "REGISTERED"),
-        "/descartar": lambda s, c, t: answer_mark(s, c, t, "DISMISSED"),
-    }
-    if command in query_handlers:
+    if command in QUERY_COMMANDS:
         argument = text.strip().split(maxsplit=1)
         return _truncate(
-            query_handlers[command](session, config, argument[1] if len(argument) > 1 else ""),
+            QUERY_COMMANDS[command](session, config, argument[1] if len(argument) > 1 else ""),
             MAX_REPLY,
         )
     handler = COMMANDS.get(command)

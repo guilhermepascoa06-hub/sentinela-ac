@@ -38,7 +38,7 @@ CONFIABILIDADE → PRECISÃO → INTEGRIDADE → OBSERVABILIDADE
 |---|---|
 | Repositório | `guilhermepascoa06-hub/sentinela-ac` — **público**, branch `main` |
 | Banco | Supabase, **session pooler** `aws-0-sa-east-1.pooler.supabase.com:5432` |
-| Testes | 328, verdes no SQLite; o PostgreSQL é exercitado pelo CI a cada push |
+| Testes | 331, verdes no SQLite; o PostgreSQL é exercitado pelo CI a cada push |
 | Qualidade | ruff, ruff format, mypy e bandit limpos |
 | Fontes | 33 confiáveis + 1 candidata · 28 saudáveis, 1 degradada, 5 circuito aberto |
 | Dados | 124 documentos · 18 oportunidades · 34 cargos · 181 versões |
