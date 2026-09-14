@@ -849,3 +849,134 @@ def test_the_same_document_twice_in_one_run_does_not_break_it(
         )
     session.commit()
     assert _semantic_pending(session, same, provider, config) is False
+
+
+def test_disagreeing_sources_are_recorded_not_silently_overwritten(
+    session: Session, source: Source, config: Configuration
+) -> None:
+    """Regression: the merge did `if current is None or better: setattr(...)`, so when a
+    second source stated a different exam date the old value vanished without trace. The
+    design forbids exactly that: record the conflict and preserve both values."""
+    report = RunReport(run_id=RUN_ID)
+    store(session, source, draft(), config, report, body=b"edital-oficial")
+
+    weaker = Source(
+        id="agregador-conflito",
+        name="Agregador",
+        institution="Agregador",
+        base_url="https://agregador.com.br/",
+        official=False,
+        trust_level=3,
+        priority=9,
+        trust_status="TRUSTED",
+        config={"allowed_hosts": ["agregador.com.br"]},
+    )
+    session.add(weaker)
+    session.commit()
+
+    document, version, _ = persist_document(
+        session, weaker.id, found(b"agregador", url="https://agregador.com.br/rb"), report
+    )
+    upsert_opportunity(
+        session,
+        draft(exam_date=date(2027, 1, 30)),
+        source=weaker,
+        document=document,
+        version=version,
+        config=config,
+        today=TODAY,
+        report=report,
+        run_id=None,
+    )
+    session.commit()
+
+    opportunity = session.execute(sa.select(Opportunity)).scalar_one()
+    # The authoritative value stands...
+    assert opportunity.exam_date == date(2026, 11, 22)
+    # ...and the disagreement is on the record, with both sides preserved.
+    clash = [item for item in opportunity.conflicts if item["field"] == "exam_date"]
+    assert len(clash) == 1
+    assert "2026-11-22" in clash[0]["kept"]
+    assert "2027-01-30" in clash[0]["rejected"]
+    assert clash[0]["rejected_source"] == weaker.id
+
+
+def test_identical_values_from_two_sources_are_not_a_conflict(
+    session: Session, source: Source, config: Configuration
+) -> None:
+    report = RunReport(run_id=RUN_ID)
+    store(session, source, draft(), config, report, body=b"um")
+    store(session, source, draft(), config, report, body=b"dois")
+    opportunity = session.execute(sa.select(Opportunity)).scalar_one()
+    assert opportunity.conflicts == []
+
+
+def test_every_source_attempt_leaves_a_run_row(
+    session: Session, source: Source, config: Configuration, secrets: Secrets
+) -> None:
+    """Regression: source_runs was declared, migrated and never written. source_health
+    only knows the present, so 'when did this source start failing?' was unanswerable."""
+    from sentinela.models import SourceRun
+    from sentinela.pipeline import run_monitor
+
+    run_monitor(session, config, secrets, kind="manual", only=[source.id], dry_run=True)
+    session.commit()
+
+    row = session.execute(sa.select(SourceRun)).scalar_one()
+    assert row.source_id == source.id
+    assert row.status in ("OK", "EMPTY", "FAILED")
+    assert row.started_at is not None and row.finished_at is not None
+
+
+def test_a_source_leaving_the_cooling_period_passes_through_recovering(
+    session: Session, source: Source, config: Configuration, secrets: Secrets
+) -> None:
+    """Regression: entering_recovery() existed but was never called, so the state jumped
+    OPEN -> HEALTHY and RECOVERING was unreachable dead code."""
+    from datetime import UTC as _UTC
+    from datetime import datetime as _datetime
+
+    from sentinela.models import SourceHealth, SystemEvent
+    from sentinela.pipeline import run_monitor
+
+    state = session.get(SourceHealth, source.id)
+    state.state = "OPEN"
+    state.open_until = _datetime(2020, 1, 1, tzinfo=_UTC)  # cooling period long over
+    session.commit()
+
+    run_monitor(session, config, secrets, kind="manual", only=[source.id], dry_run=True)
+    session.commit()
+
+    events = (
+        session.execute(sa.select(SystemEvent).where(SystemEvent.kind == "SOURCE_HEALTH"))
+        .scalars()
+        .all()
+    )
+    assert any("RECOVERING" in item.message for item in events)
+
+
+def test_url_and_acronym_differences_are_not_conflicts(
+    session: Session, source: Source, config: Configuration
+) -> None:
+    """Regression: the first version of conflict detection flagged every document's own
+    URL and treated 'IDIB' vs 'Instituto de Desenvolvimento Institucional Brasileiro' as
+    a disagreement. Real conflicts would have been buried under that noise."""
+    report = RunReport(run_id=RUN_ID)
+    store(session, source, draft(organizing_board="IDIB"), config, report, body=b"a")
+    store(
+        session,
+        source,
+        draft(
+            organizing_board="Instituto de Desenvolvimento Institucional Brasileiro",
+            official_institution_url="https://outra.riobranco.ac.gov.br/pagina",
+            official_application_url="http://www.idib.org.br",
+        ),
+        config,
+        report,
+        body=b"b",
+    )
+    session.commit()
+
+    opportunity = session.execute(sa.select(Opportunity)).scalar_one()
+    noisy = {"organizing_board", "official_institution_url", "official_application_url"}
+    assert not [item for item in opportunity.conflicts if item["field"] in noisy]

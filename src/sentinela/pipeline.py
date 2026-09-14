@@ -39,6 +39,7 @@ from sentinela.models import (
     RawSnapshot,
     Source,
     SourceHealth,
+    SourceRun,
     SystemEvent,
 )
 from sentinela.registry import spec_from_row
@@ -46,6 +47,25 @@ from sentinela.structure import build_opportunity
 
 MAX_SNAPSHOT_CHARS = 200_000
 LOCATE_PROMPT = "edital_locate_v1"
+# Fields where the certame has exactly one true value, so two sources stating different
+# things is a real disagreement worth recording. Deliberately excluded: the official_*
+# URLs, which legitimately differ per document, and organizing_board, where "IDIB" and
+# "Instituto de Desenvolvimento Institucional Brasileiro" are the same board written two
+# ways. Recording those would bury the conflicts that actually matter.
+CONFLICT_FIELDS = frozenset(
+    {
+        "edital_number",
+        "publication_date",
+        "registration_start",
+        "registration_deadline",
+        "exam_date",
+        "application_fee",
+        "fee_exemption_deadline",
+        "payment_deadline",
+        "validity",
+        "employment_regime",
+    }
+)
 DEADLINE_FIELDS = (
     ("registration", "registration_deadline", "Encerramento das inscrições"),
     ("exam", "exam_date", "Data da prova"),
@@ -461,6 +481,7 @@ def upsert_opportunity(
         previous_positions = list(previous.get("positions") or [])
 
     better = authority <= (opportunity.best_authority or 99)
+    conflicts: list[dict[str, Any]] = []
     for name in (
         "edital_number",
         "publication_date",
@@ -484,7 +505,33 @@ def upsert_opportunity(
         if incoming is None:
             continue
         current = getattr(opportunity, name)
-        if current is None or better:
+        if current is None:
+            setattr(opportunity, name, incoming)
+            continue
+        if _same_value(current, incoming):
+            continue
+        if name not in CONFLICT_FIELDS:
+            if better:
+                setattr(opportunity, name, incoming)
+            continue
+        # Two sources state different things about the same certame. The more
+        # authoritative one wins, but the disagreement is recorded and both values are
+        # preserved -- silently overwriting is exactly what the design forbids.
+        conflicts.append(
+            {
+                "field": name,
+                "kept": str(incoming if better else current),
+                "rejected": str(current if better else incoming),
+                "kept_source": source.id if better else "registro anterior",
+                "rejected_source": "registro anterior" if better else source.id,
+                "kept_authority": authority if better else opportunity.best_authority,
+                "rejected_authority": opportunity.best_authority if better else authority,
+                "resolved": better or authority > (opportunity.best_authority or 99),
+                "source_url": document.url,
+                "detected_at": now().isoformat(),
+            }
+        )
+        if better:
             setattr(opportunity, name, incoming)
     if draft.employment_type != "UNKNOWN" and (opportunity.employment_type == "UNKNOWN" or better):
         opportunity.employment_type = draft.employment_type
@@ -498,8 +545,11 @@ def upsert_opportunity(
     opportunity.evidence = {
         name: _to_jsonable(item.model_dump()) for name, item in draft.evidence.items()
     }
-    if draft.conflicts:
-        opportunity.conflicts = list(opportunity.conflicts or []) + _to_jsonable(draft.conflicts)
+    if draft.conflicts or conflicts:
+        merged_conflicts = list(opportunity.conflicts or [])
+        merged_conflicts += _to_jsonable(draft.conflicts) + conflicts
+        # Bounded: a long-running certame must not grow an unbounded audit blob.
+        opportunity.conflicts = merged_conflicts[-60:]
     sources_seen = set(opportunity.evidence_sources or [])
     sources_seen.add(source.id)
     opportunity.evidence_sources = sorted(sources_seen)
@@ -618,6 +668,21 @@ def upsert_opportunity(
         report.opportunities_updated += 1
     session.flush()
     return opportunity, changes, created
+
+
+def _same_value(left: Any, right: Any) -> bool:
+    """Equality that does not mistake formatting for disagreement."""
+    if left == right:
+        return True
+    if isinstance(left, Decimal | float | int) and isinstance(right, Decimal | float | int):
+        if isinstance(left, bool) or isinstance(right, bool):
+            return False
+        return abs(float(left) - float(right)) < 0.005
+    if isinstance(left, str) and isinstance(right, str):
+        from sentinela.domain import normalize
+
+        return normalize(left) == normalize(right)
+    return False
 
 
 def _parser_version() -> str:
@@ -1161,6 +1226,39 @@ def _semantic(
         fill_gaps(draft, result, found.url)
 
 
+def record_source_run(
+    session: Session,
+    run_id: str,
+    source: Source,
+    outcome: SourceOutcome,
+    started_at: datetime,
+    drift: bool,
+) -> None:
+    """One row per source per run: the history source_health cannot hold.
+
+    source_health only knows the present. Without this, "when did TJAC start failing?"
+    and "did this source ever return more than two documents?" are unanswerable.
+    """
+    new_documents = sum(1 for item in outcome.documents if item.unchanged is False)
+    session.add(
+        SourceRun(
+            run_id=run_id,
+            source_id=source.id,
+            status=outcome.status,
+            started_at=started_at,
+            finished_at=now(),
+            http_status=outcome.http_status,
+            response_ms=outcome.response_ms,
+            documents_discovered=len(outcome.documents),
+            documents_new=new_documents,
+            documents_changed=0,
+            drift_detected=drift,
+            recovery_method=outcome.recovery_method,
+            error=outcome.error,
+        )
+    )
+
+
 def update_health(
     session: Session,
     source: Source,
@@ -1170,7 +1268,7 @@ def update_health(
     report: RunReport,
     run_id: str,
     skipped: bool = False,
-) -> str:
+) -> tuple[str, bool]:
     state = session.get(SourceHealth, source.id)
     if state is None:
         state = SourceHealth(source_id=source.id)
@@ -1178,7 +1276,7 @@ def update_health(
         session.flush()
     if skipped:
         report.sources_skipped += 1
-        return state.state
+        return state.state, False
 
     hard_failure = outcome.status == "FAILED"
     state.total_attempts += 1
@@ -1264,7 +1362,7 @@ def update_health(
     else:
         report.sources_successful += 1
     session.flush()
-    return state.state
+    return state.state, verdict.detected
 
 
 # ---------------------------------------------------------------- the run
@@ -1336,6 +1434,18 @@ def run_monitor(
             skip, why = health.should_skip(
                 state.state if state else "HEALTHY", state.open_until if state else None
             )
+            if state is not None and health.entering_recovery(state.state, state.open_until):
+                # The cooling period ended: the source is being probed, not trusted yet.
+                # Without this the state jumped OPEN -> HEALTHY and RECOVERING was dead.
+                state.state = health.RECOVERING
+                session.flush()
+                record_event(
+                    session,
+                    monitor.id,
+                    kind="SOURCE_HEALTH",
+                    message=f"{source.id}: OPEN -> RECOVERING, testando após o resfriamento",
+                    context={"source_id": source.id},
+                )
             # A person asking for a specific source is testing a fix. Refusing to try
             # would mean nobody can verify a repair until the cooldown expires.
             if skip and force:
@@ -1362,6 +1472,7 @@ def run_monitor(
                 )
                 continue
             spec = spec_from_row(source)
+            source_started = now()
             outcome = safe_collect(
                 spec,
                 fetcher,
@@ -1390,7 +1501,10 @@ def run_monitor(
                     logger=log,
                     llm_provider=llm,
                 )
-            update_health(session, source, outcome, config=config, report=report, run_id=monitor.id)
+            _, drifted = update_health(
+                session, source, outcome, config=config, report=report, run_id=monitor.id
+            )
+            record_source_run(session, monitor.id, source, outcome, source_started, drifted)
             if outcome.rendered:
                 record_event(
                     session,

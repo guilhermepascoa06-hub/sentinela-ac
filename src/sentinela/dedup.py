@@ -145,22 +145,3 @@ def position_slug(name: str) -> str:
     """Stable identity for a cargo inside one opportunity."""
     plain = normalize(name)
     return re.sub(r"\s+", "-", plain)[:160] or "cargo"
-
-
-def merge_positions(
-    existing: list[dict[str, object]], incoming: list[dict[str, object]]
-) -> list[dict[str, object]]:
-    """Union by slug. Incoming values only fill gaps; they never erase known data."""
-    merged = {str(item["slug"]): dict(item) for item in existing}
-    for item in incoming:
-        slug = str(item["slug"])
-        if slug not in merged:
-            merged[slug] = dict(item)
-            continue
-        current = merged[slug]
-        for field, value in item.items():
-            if value in (None, "", [], {}) or field in ("slug", "id", "opportunity_id"):
-                continue
-            if current.get(field) in (None, "", [], {}):
-                current[field] = value
-    return list(merged.values())

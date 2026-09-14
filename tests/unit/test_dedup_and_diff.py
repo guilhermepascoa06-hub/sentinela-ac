@@ -11,7 +11,6 @@ from sentinela.dedup import (
     dedup_key,
     find_match,
     institution_key,
-    merge_positions,
     position_slug,
     similarity,
 )
@@ -136,18 +135,6 @@ def test_similarity_is_symmetric_and_bounded() -> None:
 
 def test_position_slug_is_stable_across_spelling() -> None:
     assert position_slug("Agente Legislativo") == position_slug("AGENTE  LEGISLATIVO")
-
-
-def test_merge_positions_never_erases_known_data() -> None:
-    existing = [{"slug": "agente", "name": "Agente", "salary": 4656.75, "weekly_workload": 30}]
-    incoming = [
-        {"slug": "agente", "name": "Agente", "salary": None, "vacancies": 2},
-        {"slug": "novo", "name": "Novo cargo"},
-    ]
-    merged = {item["slug"]: item for item in merge_positions(existing, incoming)}
-    assert merged["agente"]["salary"] == 4656.75
-    assert merged["agente"]["vacancies"] == 2
-    assert "novo" in merged
 
 
 # ---------------------------------------------------------------- change detection
