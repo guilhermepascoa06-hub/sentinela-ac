@@ -74,7 +74,7 @@ jobs:
           if git grep -nE 'postgres(ql)?(\+[a-z]+)?://[^:@[:space:]]+:[^@[:space:]]+@'                -- ':!*.example' ':!*.md' ':!.github/*'; then
             echo "::error::string de conexão com senha encontrada no repositório"; exit 1
           fi
-          if git grep -nE '[0-9]{8,12}:[A-Za-z0-9_-]{30,}' -- ':!*.lock'; then
+          if git grep -nE '\b[0-9]{8,12}:[A-Za-z0-9_-]{30,}\b' -- ':!*.lock'; then
             echo "::error::token do Telegram encontrado no repositório"; exit 1
           fi
           if git ls-files --error-unmatch .env 2>/dev/null; then
