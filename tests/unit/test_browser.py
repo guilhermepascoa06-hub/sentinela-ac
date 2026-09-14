@@ -86,3 +86,71 @@ def test_page_budget_is_enforced() -> None:
 
 def test_unsupported_scheme_is_refused() -> None:
     assert BrowserFetcher().render("javascript:alert(1)").error == "URL nao suportada"
+
+
+# --------------------------------------------------------------- LLM transient failures
+
+
+def test_free_tier_503_is_retried_then_succeeds() -> None:
+    """A free tier answers 503 and 429 routinely under load. Giving up on the first one
+    throws away the whole step for a condition that clears in seconds."""
+    import httpx
+
+    from sentinela.llm import OpenAICompatibleProvider
+
+    replies = [
+        httpx.Response(503, json={"error": {"code": 503}}),
+        httpx.Response(429, json={"error": {"code": 429}}, headers={"retry-after": "2"}),
+        httpx.Response(200, json={"choices": [{"message": {"content": '{"positions": []}'}}]}),
+    ]
+    calls: list[int] = []
+    waits: list[float] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return replies[min(len(calls) - 1, len(replies) - 1)]
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as client:
+        provider = OpenAICompatibleProvider(
+            "https://x/v1", "k", "gemini-3.5-flash", client=client, sleeper=waits.append
+        )
+        assert provider.complete("p", "d") == '{"positions": []}'
+    assert len(calls) == 3
+    assert 2.0 in waits  # the server's own retry-after was honoured
+
+
+def test_retries_are_bounded_and_the_run_is_never_blocked() -> None:
+    import httpx
+    import pytest as _pytest
+
+    from sentinela.llm import OpenAICompatibleProvider, extract_semantic
+
+    with httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(503))) as client:
+        provider = OpenAICompatibleProvider(
+            "https://x/v1", "k", "gemini-3.5-flash", client=client, sleeper=lambda _: None
+        )
+        with _pytest.raises(httpx.HTTPStatusError):
+            provider.complete("p", "d")
+        # The pipeline entry point swallows it: a provider outage degrades, never fails.
+        assert extract_semantic(provider, "edital_extraction_v1", "texto").status == "UNAVAILABLE"
+
+
+def test_a_permanent_error_is_not_retried() -> None:
+    import httpx
+    import pytest as _pytest
+
+    from sentinela.llm import OpenAICompatibleProvider
+
+    calls: list[int] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(404, json={"error": {"code": 404}})
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as client:
+        provider = OpenAICompatibleProvider(
+            "https://x/v1", "k", "modelo-que-nao-existe", client=client, sleeper=lambda _: None
+        )
+        with _pytest.raises(httpx.HTTPStatusError):
+            provider.complete("p", "d")
+    assert len(calls) == 1

@@ -133,3 +133,45 @@ def test_a_rejected_claim_leaves_the_position_untouched() -> None:
     apply_to_position(position, claims, EDITAL, "https://x.gov.br/e.pdf", "v1")
     assert position.weekly_workload is None
     assert position.evidence == {}
+
+
+LONGO = (
+    "preambulo " * 3000
+    + "\nAgente Legislativo — carga horária de 30 horas semanais e remuneração de R$ 4.656,75.\n"
+    + "epilogo " * 3000
+)
+
+
+def test_the_excerpt_carries_the_answer_from_deep_inside_a_long_document() -> None:
+    """Regression: sending the first N characters of a 56-page edital is worse than
+    useless — in the real Câmara de Rio Branco edital the cargo table starts near
+    character 146.000, so a head-truncated prompt could never contain the answer while
+    still costing tokens."""
+    from sentinela.verify import focus_excerpt
+
+    excerpt = focus_excerpt(LONGO, ["Agente Legislativo"])
+    assert len(excerpt) < len(LONGO) / 3
+    assert "30 horas semanais" in excerpt
+    assert "R$ 4.656,75" in excerpt
+
+
+def test_excerpt_falls_back_to_the_head_when_the_cargo_is_never_named() -> None:
+    from sentinela.verify import focus_excerpt
+
+    excerpt = focus_excerpt(LONGO, ["Cargo Inexistente"], budget=500)
+    assert len(excerpt) == 500
+    assert excerpt == LONGO[:500]
+
+
+def test_excerpt_respects_its_budget() -> None:
+    from sentinela.verify import focus_excerpt
+
+    assert len(focus_excerpt(LONGO, ["Agente Legislativo"], budget=800)) <= 800
+
+
+def test_overlapping_windows_are_merged_not_duplicated() -> None:
+    from sentinela.verify import focus_excerpt
+
+    texto = "x" * 100 + " Agente Legislativo aparece aqui e Agente Legislativo de novo " + "y" * 100
+    excerpt = focus_excerpt(texto, ["Agente Legislativo"])
+    assert excerpt.count("aparece aqui") == 1

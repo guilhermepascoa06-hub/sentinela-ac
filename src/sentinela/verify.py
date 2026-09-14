@@ -148,6 +148,60 @@ def apply_to_position(
     return results
 
 
+WINDOW_BEFORE = 600
+WINDOW_AFTER = 2_400
+MAX_EXCERPT_CHARS = 22_000
+
+
+def focus_excerpt(document_text: str, names: list[str], budget: int = MAX_EXCERPT_CHARS) -> str:
+    """The regions of a long document where these cargos are actually named.
+
+    Sending the first N characters of a 56-page edital is worse than useless: in the real
+    Camara de Rio Branco edital the cargo table starts around character 146.000, so a
+    head-truncated prompt would never contain the answer while still costing tokens.
+    """
+    from sentinela.domain import normalize_indexed
+
+    plain, origins = normalize_indexed(document_text)
+    spans: list[tuple[int, int]] = []
+    for name in names:
+        needle = normalize(name)
+        if len(needle) < 4:
+            continue
+        start = 0
+        while len(spans) < 40:
+            found = plain.find(needle, start)
+            if found < 0:
+                break
+            origin = origins[found]
+            spans.append((max(0, origin - WINDOW_BEFORE), origin + WINDOW_AFTER))
+            start = found + len(needle)
+    if not spans:
+        return document_text[:budget]
+
+    spans.sort()
+    merged: list[list[int]] = [list(spans[0])]
+    for begin, end in spans[1:]:
+        if begin <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([begin, end])
+
+    pieces: list[str] = []
+    used = 0
+    for begin, end in merged:
+        chunk = document_text[begin:end]
+        if used + len(chunk) > budget:
+            chunk = chunk[: budget - used]
+        if not chunk:
+            break
+        pieces.append(chunk)
+        used += len(chunk)
+        if used >= budget:
+            break
+    return ("\n[...]\n").join(pieces)
+
+
 def summarize(results: list[Verification]) -> dict[str, int]:
     counts = {"confirmed": 0, "quote_not_found": 0, "parser_disagrees": 0, "rejected": 0}
     for item in results:

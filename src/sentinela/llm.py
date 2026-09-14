@@ -9,6 +9,8 @@ Three properties matter more than capability here:
 from __future__ import annotations
 
 import json
+import random
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -38,6 +40,19 @@ FILLABLE = frozenset(
     }
 )
 MAX_INPUT_CHARS = 24_000
+# A free tier says "not now" far more often than it says "no".
+TRANSIENT_STATUS = frozenset({429, 500, 502, 503, 504, 529})
+
+
+def _retry_delay(response: Any, attempt: int) -> float:
+    if response is not None:
+        header = response.headers.get("retry-after")
+        if header:
+            try:
+                return max(0.0, min(float(header), 30.0))
+            except ValueError:
+                pass
+    return min(2.0**attempt, 12.0) + random.uniform(0, 0.5)  # noqa: S311  # nosec B311
 
 
 @dataclass(slots=True)
@@ -87,6 +102,8 @@ class OpenAICompatibleProvider:
         model_version: str = "",
         client: httpx.Client | None = None,
         timeout: float = 90.0,
+        max_attempts: int = 3,
+        sleeper: Any = time.sleep,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
@@ -94,27 +111,53 @@ class OpenAICompatibleProvider:
         self._key = api_key
         self._client = client
         self._timeout = timeout
+        self.max_attempts = max_attempts
+        self.sleeper = sleeper
 
     def complete(self, prompt: str, document: str) -> str:
+        """Ask once, retrying only the answers that mean "not now".
+
+        A free tier answers 503 and 429 routinely under load. Giving up on the first one
+        would throw away the whole step for a condition that clears in seconds.
+        """
         owned = self._client is None
         client = self._client or httpx.Client(timeout=self._timeout)
+        payload = {
+            "model": self.model,
+            "temperature": 0,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": document[:MAX_INPUT_CHARS]},
+            ],
+        }
         try:
-            response = client.post(
-                f"{self.base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {self._key}"},
-                json={
-                    "model": self.model,
-                    "temperature": 0,
-                    "response_format": {"type": "json_object"},
-                    "messages": [
-                        {"role": "system", "content": prompt},
-                        {"role": "user", "content": document[:MAX_INPUT_CHARS]},
-                    ],
-                },
-            )
-            response.raise_for_status()
-            body = response.json()
-            return str(body["choices"][0]["message"]["content"])
+            last: Exception | None = None
+            for attempt in range(1, self.max_attempts + 1):
+                try:
+                    response = client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers={"Authorization": f"Bearer {self._key}"},
+                        json=payload,
+                    )
+                except httpx.HTTPError as error:
+                    last = error
+                    response = None
+                if response is not None:
+                    if response.status_code not in TRANSIENT_STATUS:
+                        response.raise_for_status()
+                        body = response.json()
+                        return str(body["choices"][0]["message"]["content"])
+                    last = httpx.HTTPStatusError(
+                        f"HTTP {response.status_code}",
+                        request=response.request,
+                        response=response,
+                    )
+                if attempt == self.max_attempts:
+                    break
+                delay = _retry_delay(response, attempt)
+                self.sleeper(delay)
+            raise last if last is not None else RuntimeError("LLM sem resposta")
         finally:
             if owned:
                 client.close()

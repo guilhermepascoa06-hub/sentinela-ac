@@ -45,6 +45,7 @@ from sentinela.registry import spec_from_row
 from sentinela.structure import build_opportunity
 
 MAX_SNAPSHOT_CHARS = 200_000
+LOCATE_PROMPT = "edital_locate_v1"
 DEADLINE_FIELDS = (
     ("registration", "registration_deadline", "Encerramento das inscrições"),
     ("exam", "exam_date", "Data da prova"),
@@ -867,7 +868,11 @@ def process_source(
         report.documents_discovered += 1
         try:
             document, version, changed = persist_document(session, source.id, found, report)
-            if not changed and document.processing_state == "DONE":
+            if (
+                not changed
+                and document.processing_state == "DONE"
+                and not _semantic_pending(session, found, llm_provider, config)
+            ):
                 continue  # unchanged content: skip the expensive stages entirely
             document.attempts += 1
             if not found.document.usable:
@@ -969,6 +974,61 @@ def process_source(
             session.flush()
 
 
+def _semantic_pending(
+    session: Session, found: FoundDocument, provider: Any, config: Configuration
+) -> bool:
+    """Has this exact document ever been shown to this exact model and prompt?
+
+    A document whose bytes did not change is normally skipped, which is right. But when
+    the semantic layer is switched on -- or its prompt or model changes -- documents that
+    were already stored have never been looked at by it, and their gaps would stay open
+    forever. The cache makes this a one-off per document: once asked, it is never asked
+    again for the same prompt and model.
+    """
+    if provider is None:
+        return False
+    with session.no_autoflush:
+        return (
+            session.execute(
+                sa.select(ExtractionResult.id).where(
+                    ExtractionResult.document_hash == found.content_hash,
+                    ExtractionResult.prompt_version == LOCATE_PROMPT,
+                    ExtractionResult.model == provider.model,
+                    ExtractionResult.model_version == provider.model_version,
+                )
+            ).first()
+            is None
+        )
+
+
+def _remember_extraction(
+    session: Session, found: FoundDocument, provider: Any, status: str, payload: dict[str, Any]
+) -> None:
+    with session.no_autoflush:
+        already = session.execute(
+            sa.select(ExtractionResult.id).where(
+                ExtractionResult.document_hash == found.content_hash,
+                ExtractionResult.prompt_version == LOCATE_PROMPT,
+                ExtractionResult.model == provider.model,
+                ExtractionResult.model_version == provider.model_version,
+            )
+        ).first()
+    if already:
+        return  # the same document is often linked from more than one page
+    session.add(
+        ExtractionResult(
+            document_hash=found.content_hash,
+            prompt_version=LOCATE_PROMPT,
+            model=provider.model,
+            model_version=provider.model_version,
+            status=status,
+            payload=payload,
+            created_at=now(),
+        )
+    )
+    session.flush()
+
+
 def _locate_missing_position_fields(
     session: Session,
     draft: OpportunityDraft,
@@ -984,50 +1044,55 @@ def _locate_missing_position_fields(
     re-derive the same value.
     """
     from sentinela.llm import load_prompt, parse_located
-    from sentinela.verify import VERIFIERS, apply_to_position, summarize
+    from sentinela.verify import VERIFIERS, apply_to_position, focus_excerpt, summarize
 
     gaps = [
         item
         for item in draft.positions
         if not item.synthetic and any(getattr(item, name, None) is None for name in VERIFIERS)
     ]
+    prompt_version = LOCATE_PROMPT
     if not gaps:
+        _remember_extraction(session, found, provider, "NO_GAPS", {"positions": []})
         return {}
-    prompt_version = "edital_locate_v1"
-    cached = session.execute(
-        sa.select(ExtractionResult).where(
-            ExtractionResult.document_hash == found.content_hash,
-            ExtractionResult.prompt_version == prompt_version,
-            ExtractionResult.model == provider.model,
-            ExtractionResult.model_version == provider.model_version,
-        )
-    ).scalar_one_or_none()
+    with session.no_autoflush:
+        cached = session.execute(
+            sa.select(ExtractionResult).where(
+                ExtractionResult.document_hash == found.content_hash,
+                ExtractionResult.prompt_version == prompt_version,
+                ExtractionResult.model == provider.model,
+                ExtractionResult.model_version == provider.model_version,
+            )
+        ).scalar_one_or_none()
     if cached is not None:
         located = list(cached.payload.get("positions") or [])
     else:
         try:
-            raw = provider.complete(load_prompt(prompt_version), found.document.text)
+            excerpt = focus_excerpt(found.document.text, [item.name for item in gaps])
+            raw = provider.complete(load_prompt(prompt_version), excerpt)
             located = parse_located(raw)
-            status = "OK"
-        except Exception as error:  # noqa: BLE001 - provider outage must not fail the run
-            located, status = [], type(error).__name__
-        session.add(
-            ExtractionResult(
-                document_hash=found.content_hash,
-                prompt_version=prompt_version,
-                model=provider.model,
-                model_version=provider.model_version,
-                status=status,
-                payload={"positions": located},
-                created_at=now(),
-            )
-        )
+        except Exception:  # noqa: BLE001 - provider outage must not fail the run
+            # Deliberately NOT cached. A free tier answers 503 under load; writing that
+            # to the cache would mark the document as "already asked" and it would never
+            # be looked at again.
+            return {}
+        _remember_extraction(session, found, provider, "OK", {"positions": located})
     if not located:
         return {}
     by_name = {normalize_name(item["name"]): item["fields"] for item in located}
     results = []
     for position in gaps:
-        claims = by_name.get(normalize_name(position.name))
+        wanted = normalize_name(position.name)
+        claims = by_name.get(wanted)
+        if claims is None:
+            # A model may render the same cargo slightly differently ("Analista
+            # Legislativo - Direito" vs "... – Especialidade Direito"). Containment in
+            # either direction is safe here: a wrong match still has to survive the
+            # quote check and the parser before anything is accepted.
+            for name, fields in by_name.items():
+                if name and (name in wanted or wanted in name):
+                    claims = fields
+                    break
         if claims:
             results += apply_to_position(
                 position, claims, found.document.text, found.url, prompt_version

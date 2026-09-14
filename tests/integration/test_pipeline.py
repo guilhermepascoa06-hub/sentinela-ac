@@ -780,3 +780,67 @@ def test_watchdog_alert_is_not_left_queued(
     assert rows, "o watchdog deveria ter gerado alerta"
     assert all(row.status == "SENT" for row in rows)
     assert report.notifications_sent == len(rows)
+
+
+def test_a_transient_provider_failure_is_never_cached(
+    session: Session, source: Source, config: Configuration
+) -> None:
+    """Regression: a free-tier 503 was written to the extraction cache, marking the
+    document as 'already asked'. It would then never be looked at again, so its gaps
+    would stay open forever because of one bad minute."""
+    import sqlalchemy as _sa
+
+    from sentinela.models import ExtractionResult
+    from sentinela.pipeline import _locate_missing_position_fields, _semantic_pending
+
+    class Broken:
+        name, model, model_version = "broken", "gemini-3.5-flash", "gemini-3.5-flash"
+
+        def complete(self, prompt: str, document: str) -> str:
+            raise httpx.HTTPStatusError(
+                "503",
+                request=httpx.Request("POST", "https://x"),
+                response=httpx.Response(503),
+            )
+
+    draft_item = draft()
+    draft_item.positions[0].weekly_workload = None
+    draft_item.positions[0].salary = None
+    found_document = found(b"conteudo-com-lacuna")
+
+    result = _locate_missing_position_fields(session, draft_item, found_document, config, Broken())
+    session.commit()
+
+    assert result == {}
+    assert (
+        session.execute(_sa.select(_sa.func.count()).select_from(ExtractionResult)).scalar_one()
+        == 0
+    )
+    # Still pending, so the next run will try again instead of giving up for good.
+    assert _semantic_pending(session, found_document, Broken(), config) is True
+
+
+def test_the_same_document_twice_in_one_run_does_not_break_it(
+    session: Session, source: Source, config: Configuration
+) -> None:
+    """Regression: the same PDF is routinely linked from more than one page. Checking the
+    extraction cache autoflushed the row just queued for it, turning the second sighting
+    into a unique-key violation that killed the document."""
+    from sentinela.pipeline import _locate_missing_position_fields, _semantic_pending
+
+    class Quiet:
+        name, model, model_version = "quiet", "gemini-3.5-flash", "gemini-3.5-flash"
+
+        def complete(self, prompt: str, document: str) -> str:
+            return '{"positions": []}'
+
+    provider = Quiet()
+    same = found(b"mesmo-pdf-linkado-duas-vezes")
+    complete_draft = draft()  # every field already known: no gaps
+
+    for _ in range(3):
+        assert (
+            _locate_missing_position_fields(session, complete_draft, same, config, provider) == {}
+        )
+    session.commit()
+    assert _semantic_pending(session, same, provider, config) is False
