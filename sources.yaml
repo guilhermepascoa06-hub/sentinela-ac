@@ -1,0 +1,661 @@
+sources:
+  - id: "prefeitura-rio-branco"
+    name: "Prefeitura de Rio Branco - Editais"
+    institution: "Prefeitura Municipal de Rio Branco"
+    base_url: "https://www.riobranco.ac.gov.br/editais-processos-seletivos/"
+    official: true
+    trust_level: 1
+    priority: 1
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.riobranco.ac.gov.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 8
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.riobranco.ac.gov.br/editais-processos-seletivos/"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Mistura editais de contratação, esporte e PSS; paginação precisa de auditoria."
+  - id: "rb-simplificado"
+    name: "RB Simplificado"
+    institution: "Prefeitura Municipal de Rio Branco"
+    base_url: "https://rbsimplificado.riobranco.ac.gov.br/"
+    official: true
+    trust_level: 1
+    priority: 2
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["rbsimplificado.riobranco.ac.gov.br"]
+    seed_urls: ["https://rbsimplificado.riobranco.ac.gov.br/edital/3-seinfra-n-0012026"]
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 8
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://rbsimplificado.riobranco.ac.gov.br/"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Portal mantém certames antigos; calendário deve prevalecer sobre data de descoberta."
+  - id: "camara-rio-branco"
+    name: "Câmara de Rio Branco"
+    institution: "Câmara Municipal de Rio Branco"
+    base_url: "https://www.riobranco.ac.leg.br/institucional/noticias"
+    official: true
+    trust_level: 1
+    priority: 1
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.riobranco.ac.leg.br","riobranco.ac.leg.br"]
+    seed_urls: ["https://www.riobranco.ac.leg.br/institucional/noticias/camara-abre-edital-de-concurso-publico-com-vagas-para-nivel-medio-e-superior","https://www.riobranco.ac.leg.br/transparencia/concurso/2026/EDITAL_01_CARGOS_GERAISVERSAOPUBLICAO.pdf"]
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 8
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.riobranco.ac.leg.br/institucional/noticias"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Página transparência/concurso/Concursos está desatualizada em relação ao edital 01/2026; monitorar notícias e documento oficial."
+  - id: "sead-acre"
+    name: "SEAD Acre - Concursos"
+    institution: "Governo do Estado do Acre - SEAD"
+    base_url: "https://sead.ac.gov.br/gestao-governamental/editais-e-concursos/"
+    official: true
+    trust_level: 1
+    priority: 2
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["sead.ac.gov.br"]
+    seed_urls: ["https://sead.ac.gov.br/recrutamento-e-selecao/"]
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 8
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://sead.ac.gov.br/gestao-governamental/editais-e-concursos/"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Portal em migração; recrutamento-e-selecao contém histórico complementar."
+  - id: "doe-acre"
+    name: "Diário Oficial do Acre"
+    institution: "Governo do Estado do Acre"
+    base_url: "https://www.diario.ac.gov.br/"
+    official: true
+    trust_level: 1
+    priority: 2
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.diario.ac.gov.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 8
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.diario.ac.gov.br/"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Diários extensos; limite de documentos e extração genérica não garantem leitura exaustiva de todas as seções."
+  - id: "transparencia-acre"
+    name: "Transparência Acre - Concursos"
+    institution: "Governo do Estado do Acre - SEAD"
+    base_url: "https://transparencia.ac.gov.br/conteudo/concursos"
+    official: true
+    trust_level: 1
+    priority: 4
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["transparencia.ac.gov.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 8
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://transparencia.ac.gov.br/conteudo/concursos"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Tabela pode depender de JavaScript; dados indicavam atualização em 26/05/2026."
+  - id: "tjac"
+    name: "TJAC - Concursos e Processos Seletivos"
+    institution: "Tribunal de Justiça do Estado do Acre"
+    base_url: "https://www.tjac.jus.br/adm/processos-seletivos/"
+    official: true
+    trust_level: 1
+    priority: 2
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.tjac.jus.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 8
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.tjac.jus.br/adm/processos-seletivos/"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Separar concurso externo, remoção interna, estágio e convocação de aprovados."
+  - id: "tre-ac"
+    name: "TRE-AC - Concurso público"
+    institution: "Tribunal Regional Eleitoral do Acre"
+    base_url: "https://www.tre-ac.jus.br/institucional/concurso-publico"
+    official: true
+    trust_level: 1
+    priority: 3
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.tre-ac.jus.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 8
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.tre-ac.jus.br/institucional/concurso-publico"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Técnico Judiciário não implica ensino médio: validar escolaridade no edital vigente."
+  - id: "mpac"
+    name: "MPAC - Servidores"
+    institution: "Ministério Público do Estado do Acre"
+    base_url: "https://www.mpac.mp.br/concursos/servidores/"
+    official: true
+    trust_level: 1
+    priority: 2
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.mpac.mp.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 8
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.mpac.mp.br/concursos/servidores/"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Página inclui concursos anteriores; acompanhar anexos e retificações."
+  - id: "dpe-ac"
+    name: "DPE-AC"
+    institution: "Defensoria Pública do Estado do Acre"
+    base_url: "https://defensoria.ac.def.br/"
+    official: true
+    trust_level: 1
+    priority: 3
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["defensoria.ac.def.br","portalcandidato.ac.def.br"]
+    seed_urls: ["https://portalcandidato.ac.def.br/portal"]
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 8
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://defensoria.ac.def.br/"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Homepage genérica; Portal Candidato pode depender de JavaScript e frequentemente contém estágios."
+  - id: "tce-ac"
+    name: "TCE-AC"
+    institution: "Tribunal de Contas do Estado do Acre"
+    base_url: "https://www.tceac.tc.br"
+    official: true
+    trust_level: 1
+    priority: 3
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.tceac.tc.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 8
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.tceac.tc.br"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Abertura pelo navegador de pesquisa falhou; domínio institucional confirmado por sistemas.tceac.tc.br. Cobertura alternativa Cebraspe, sem contornar bloqueios."
+  - id: "aleac"
+    name: "ALEAC - Portal da Transparência"
+    institution: "Assembleia Legislativa do Estado do Acre"
+    base_url: "https://app.al.ac.leg.br/servicos?page=0"
+    official: true
+    trust_level: 1
+    priority: 3
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["app.al.ac.leg.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 8
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://app.al.ac.leg.br/servicos?page=0"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Índice de serviços aponta Diário Eletrônico Legislativo; nenhuma lista recente de concursos validada."
+  - id: "ifac"
+    name: "IFAC - Concursos"
+    institution: "Instituto Federal do Acre"
+    base_url: "https://www.ifac.edu.br/o-ifac/gestao-de-pessoas/concursos"
+    official: true
+    trust_level: 1
+    priority: 3
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.ifac.edu.br","selecoes.ifac.edu.br","sigrh.ifac.edu.br"]
+    seed_urls: ["https://selecoes.ifac.edu.br/","https://sigrh.ifac.edu.br/sigrh/public/home.jsf"]
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 8
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.ifac.edu.br/o-ifac/gestao-de-pessoas/concursos"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Concursos e seleções distribuídos por portal institucional, SIGRH e selecoes.ifac.edu.br; separar seleção de alunos."
+  - id: "ufac"
+    name: "UFAC - Portal de Editais"
+    institution: "Universidade Federal do Acre"
+    base_url: "https://www3.ufac.br/recentes"
+    official: true
+    trust_level: 1
+    priority: 3
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www3.ufac.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 8
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www3.ufac.br/recentes"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Mistura seleção acadêmica e pessoal; requer confirmação do cargo e campus de lotação."
+  - id: "dou"
+    name: "Diário Oficial da União"
+    institution: "Imprensa Nacional"
+    base_url: "https://www.in.gov.br"
+    official: true
+    trust_level: 1
+    priority: 3
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.in.gov.br","in.gov.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 6
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.in.gov.br"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Portal nacional de grande volume e busca dinâmica; cobertura genérica não é leitura integral do DOU."
+  - id: "trf1"
+    name: "TRF1 - Concursos Servidores"
+    institution: "Tribunal Regional Federal da 1ª Região"
+    base_url: "https://www.trf1.jus.br/trf1/concursos/concursos-servidores"
+    official: true
+    trust_level: 1
+    priority: 4
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.trf1.jus.br","trf1.jus.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 6
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.trf1.jus.br/trf1/concursos/concursos-servidores"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Região inclui Acre; prova em Rio Branco não comprova lotação. Exige verificar escolaridade atual."
+  - id: "trt14"
+    name: "TRT14 - Concursos Servidores"
+    institution: "Tribunal Regional do Trabalho da 14ª Região"
+    base_url: "https://portal.trt14.jus.br/portal/concursos"
+    official: true
+    trust_level: 1
+    priority: 4
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["portal.trt14.jus.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 6
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://portal.trt14.jus.br/portal/concursos"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Abrange Rondônia e Acre; não presumir lotação na capital acreana."
+  - id: "banco-amazonia"
+    name: "Banco da Amazônia - Concursos"
+    institution: "Banco da Amazônia"
+    base_url: "https://www.bancoamazonia.com.br/acesso-informacao/concursos-e-empregados"
+    official: true
+    trust_level: 1
+    priority: 2
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.bancoamazonia.com.br","www.bancodamazonia.com.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 6
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.bancoamazonia.com.br/acesso-informacao/concursos-e-empregados"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Site em migração, conteúdo parcialmente renderizado. Polo de inscrição não garante unidade sem edital."
+  - id: "banco-brasil"
+    name: "Banco do Brasil - Concurso"
+    institution: "Banco do Brasil"
+    base_url: "https://www.bb.com.br/site/concurso-bb/"
+    official: true
+    trust_level: 1
+    priority: 2
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.bb.com.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 6
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.bb.com.br/site/concurso-bb/"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Página depende de JavaScript; não confundir notícias especulativas com edital publicado."
+  - id: "caixa"
+    name: "CAIXA - Trabalhe na Caixa"
+    institution: "Caixa Econômica Federal"
+    base_url: "https://www.caixa.gov.br/sobre-a-caixa/trabalhe-na-caixa/paginas/default.aspx"
+    official: true
+    trust_level: 1
+    priority: 2
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.caixa.gov.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 6
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.caixa.gov.br/sobre-a-caixa/trabalhe-na-caixa/paginas/default.aspx"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Portal pode bloquear automação. Confirmar polo e unidade; nível superior também aparece."
+  - id: "correios"
+    name: "Correios - PROSEL"
+    institution: "Empresa Brasileira de Correios e Telégrafos"
+    base_url: "https://prosel.correios.com.br/concursos"
+    official: true
+    trust_level: 1
+    priority: 4
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["prosel.correios.com.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 6
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://prosel.correios.com.br/concursos"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Lista nacional; aprendizes não equivalem a emprego público permanente."
+  - id: "ibge"
+    name: "IBGE - Trabalhe Conosco"
+    institution: "Instituto Brasileiro de Geografia e Estatística"
+    base_url: "https://www.ibge.gov.br/acesso-informacao/institucional/trabalhe-conosco.html"
+    official: true
+    trust_level: 1
+    priority: 3
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.ibge.gov.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 6
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.ibge.gov.br/acesso-informacao/institucional/trabalhe-conosco.html"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Separar efetivo, temporário e estágio; arquivos podem estar em FTP/hosts adicionais não autorizados."
+  - id: "inss"
+    name: "INSS - Concursos"
+    institution: "Instituto Nacional do Seguro Social"
+    base_url: "https://www.gov.br/inss/pt-br/acesso-a-informacao/servidores/concursos-publicos"
+    official: true
+    trust_level: 1
+    priority: 4
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.gov.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 6
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.gov.br/inss/pt-br/acesso-a-informacao/servidores/concursos-publicos"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Validar gerência/agência de lotação e escolaridade por edital."
+  - id: "conab"
+    name: "Conab - Concursos em Aberto"
+    institution: "Companhia Nacional de Abastecimento"
+    base_url: "https://www.gov.br/conab/pt-br/acesso-a-informacao/empregados-publicos/concursos-publicos/concursos-em-aberto/concursos-em-aberto-2"
+    official: true
+    trust_level: 1
+    priority: 3
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.gov.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 6
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.gov.br/conab/pt-br/acesso-a-informacao/empregados-publicos/concursos-publicos/concursos-em-aberto/concursos-em-aberto-2"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Título em aberto pode incluir homologação; conferir inscrições e regional do Acre."
+  - id: "crea-ac"
+    name: "CREA-AC - Transparência"
+    institution: "Conselho Regional de Engenharia e Agronomia do Acre"
+    base_url: "https://www.creaac.org.br/portal/?categoria=36&ir=documento"
+    official: true
+    trust_level: 1
+    priority: 3
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.creaac.org.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 6
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.creaac.org.br/portal/?categoria=36&ir=documento"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Comissão para concurso criada pela Portaria 060/2025; comissão não é edital de inscrições."
+  - id: "crm-ac"
+    name: "CRM-AC - Concursos"
+    institution: "Conselho Regional de Medicina do Acre"
+    base_url: "https://transparencia.crmac.org.br/concursos/"
+    official: true
+    trust_level: 1
+    priority: 3
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["transparencia.crmac.org.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 6
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://transparencia.crmac.org.br/concursos/"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Upload em 2025 contém edital de 2021; data de upload não representa concurso novo."
+  - id: "estado-acre"
+    name: "Governo Acre - Chamadas Públicas e Editais"
+    institution: "Governo do Estado do Acre"
+    base_url: "https://estado.ac.gov.br/acre/chamadas-publicas-e-editais/"
+    official: true
+    trust_level: 1
+    priority: 3
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["estado.ac.gov.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 6
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://estado.ac.gov.br/acre/chamadas-publicas-e-editais/"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Inclui Fundhacre e outros órgãos/fundações, mas também bolsas, residência e chamamentos sem emprego."
+  - id: "ibama"
+    name: "Ibama - Concursos"
+    institution: "Instituto Brasileiro do Meio Ambiente e dos Recursos Naturais Renováveis"
+    base_url: "https://www.gov.br/ibama/pt-br/acesso-a-informacao/concursos"
+    official: true
+    trust_level: 1
+    priority: 4
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.gov.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 6
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.gov.br/ibama/pt-br/acesso-a-informacao/concursos"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Concursos nacionais; exigir lotação Rio Branco e não inferir ensino médio do nome técnico."
+  - id: "funai"
+    name: "Funai - Processos Seletivos"
+    institution: "Fundação Nacional dos Povos Indígenas"
+    base_url: "https://www.gov.br/funai/pt-br/acesso-a-informacao/servidores/servidores-funai/processos_seletivos"
+    official: true
+    trust_level: 1
+    priority: 4
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.gov.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 6
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.gov.br/funai/pt-br/acesso-a-informacao/servidores/servidores-funai/processos_seletivos"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Inclui remoção interna; excluir seleção restrita a servidores e validar requisitos indígenas."
+  - id: "cnu"
+    name: "Concurso Público Nacional Unificado"
+    institution: "Ministério da Gestão e da Inovação em Serviços Públicos"
+    base_url: "https://www.gov.br/gestao/pt-br/concursonacional/editais"
+    official: true
+    trust_level: 1
+    priority: 4
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.gov.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 6
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.gov.br/gestao/pt-br/concursonacional/editais"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Editais nacionais extensos; cidade de prova não é lotação. Banco de aprovados não abre novas inscrições."
+  - id: "cebraspe-tce-ac"
+    name: "Cebraspe - TCE Acre"
+    institution: "Tribunal de Contas do Estado do Acre"
+    base_url: "https://www.cebraspe.org.br/concursos/TCE_AC_26"
+    official: true
+    trust_level: 2
+    priority: 5
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.cebraspe.org.br","cdn.cebraspe.org.br"]
+    seed_urls: ["https://cdn.cebraspe.org.br/concursos/TCE_AC_24/arquivos/ED_1_TCE_AC_24_ABERTURA.PDF"]
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 6
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.cebraspe.org.br/concursos/TCE_AC_26"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Banca vinculada a anúncio institucional; seleção 2026 de conselheiro exige superior e experiência."
+  - id: "idib"
+    name: "IDIB - Concursos"
+    institution: "Instituto de Desenvolvimento Institucional Brasileiro"
+    base_url: "https://www.idib.org.br"
+    official: true
+    trust_level: 2
+    priority: 3
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.idib.org.br","idib.org.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 6
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.idib.org.br"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Banca confirmada pela Câmara de Rio Branco no edital 01/2026. Site falhou na ferramenta de pesquisa; não contornar bloqueio."
+  - id: "pci"
+    name: "PCI Concursos - Descoberta"
+    institution: "PCI Concursos"
+    base_url: "https://www.pciconcursos.com.br/concursos/"
+    official: false
+    trust_level: 3
+    priority: 9
+    adapter: "generic"
+    discovery_method: "html"
+    enabled: true
+    trust_status: "TRUSTED"
+    allowed_hosts: ["www.pciconcursos.com.br"]
+    seed_urls: []
+    link_pattern: "(?i)concurso|editais?|seletiv|retifica|prorrog|convoca|\\.pdf(?:$|\\?)"
+    max_documents: 6
+    max_depth: 2
+    expected_min_links: 0
+    validation_url: "https://www.pciconcursos.com.br/concursos/"
+    validated_at: "2026-09-14T04:49:09Z"
+    limitations: "Somente descoberta. Toda oportunidade requer confirmação institucional ou banca legitimada."

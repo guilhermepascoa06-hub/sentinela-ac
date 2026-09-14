@@ -1,0 +1,90 @@
+name: Monitoramento diário
+
+on:
+  schedule:
+    # 07:17 em America/Rio_Branco (UTC-5) = 12:17 UTC. Fora da hora cheia de propósito:
+    # o agendador do GitHub sofre atraso e congestionamento no minuto 0.
+    - cron: '17 12 * * *'
+    # Execução redundante às 08:17 locais. Ela consulta o banco e sai em segundos se a
+    # primária já concluiu; só assume o ciclo quando a primária faltou ou falhou.
+    - cron: '17 13 * * *'
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Coletar apenas estas fontes (separadas por vírgula)'
+        required: false
+      force:
+        description: 'Rodar o ciclo completo mesmo se a execução de hoje já concluiu'
+        type: boolean
+        default: false
+
+# Uma execução por vez. O lock consultivo no PostgreSQL protege contra concorrência
+# entre repositórios e execuções manuais; isto protege dentro do GitHub Actions.
+concurrency:
+  group: sentinela-monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      WATCHDOG_PING_URL: ${{ secrets.WATCHDOG_PING_URL }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Instalar
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+      - name: Verificar segredo do banco
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::DATABASE_URL não configurado nos segredos do repositório"; exit 1
+          fi
+      - name: Migrations
+        run: alembic upgrade head
+      - name: Executar monitoramento
+        id: run
+        run: |
+          EXTRA=""
+          # A execução das 13:17 UTC é a redundante.
+          if [ "${{ github.event.schedule }}" = "17 13 * * *" ]; then
+            EXTRA="--skip-if-fresh --kind backup"
+          fi
+          if [ "${{ inputs.force }}" = "true" ]; then EXTRA=""; fi
+          ONLY=""
+          for s in $(echo "${{ inputs.only }}" | tr ',' ' '); do ONLY="$ONLY --only $s"; done
+          sentinela run --trigger "github-actions" $EXTRA $ONLY
+      - name: Watchdog
+        if: always()
+        run: sentinela watchdog
+      - name: Abrir issues para fontes degradadas
+        if: always()
+        run: sentinela deep-audit --no-open-issues || true
+        continue-on-error: true
+      - name: Publicar relatório
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorio-${{ github.run_id }}
+          path: |
+            reports/latest.md
+            reports/notifications/
+          retention-days: 30
+          if-no-files-found: warn

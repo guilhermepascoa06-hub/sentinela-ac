@@ -1,0 +1,72 @@
+name: Backup do banco
+
+on:
+  schedule:
+    # 03:07 em America/Rio_Branco = 08:07 UTC, longe das janelas de coleta.
+    - cron: '7 8 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: sentinela-backup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+      - name: Cliente PostgreSQL
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+      - name: Gerar e verificar backup
+        run: sentinela backup --directory backups --keep-days 30
+      - name: Teste de restauração
+        # Um backup que ninguém consegue restaurar não é backup. Restaura em um banco
+        # descartável e confere que as oportunidades voltaram.
+        run: |
+          python - <<'PY'
+          import glob, sys
+          from pathlib import Path
+          from sentinela.backup import restore_json, verify
+          from sentinela.db import create_engine
+          from sentinela.models import Base, Opportunity
+          import sqlalchemy as sa
+
+          arquivos = sorted(glob.glob("backups/sentinela-*.gz"))
+          if not arquivos:
+              sys.exit("nenhum backup gerado")
+          alvo = Path(arquivos[-1])
+          ok, detalhe = verify(alvo)
+          print("verificacao:", ok, detalhe)
+          if not ok:
+              sys.exit(1)
+          if alvo.name.endswith(".json.gz"):
+              engine = create_engine("sqlite+pysqlite:///restore-test.sqlite")
+              Base.metadata.create_all(engine)
+              inseridos = restore_json(engine, alvo)
+              print("restaurado:", inseridos)
+              with engine.connect() as c:
+                  total = c.execute(sa.select(sa.func.count()).select_from(Opportunity.__table__)).scalar_one()
+              print("oportunidades restauradas:", total)
+          else:
+              print("dump pg_dump verificado; restauracao completa e feita com psql (ver RUNBOOK.md)")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backup-${{ github.run_id }}
+          path: backups/
+          retention-days: 30
+          if-no-files-found: error

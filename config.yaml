@@ -1,0 +1,44 @@
+profile:
+  city: Rio Branco
+  state: AC
+  country: Brazil
+  timezone: America/Rio_Branco
+education:
+  accepted: [high_school]
+workload:
+  ideal_max_weekly_hours: 20
+  acceptable_max_weekly_hours: 30
+monitoring:
+  primary_local_time: '07:17'
+  backup_local_time: '08:17'
+  source_timeout_seconds: 25
+  max_attempts: 3
+  minimum_request_interval_seconds: 1.5
+  max_document_bytes: 12582912
+  max_pdf_pages: 180
+  max_ocr_pages: 12
+  max_documents_per_run: 160
+  max_run_minutes: 40
+  circuit_failure_threshold: 3
+  circuit_cooldown_hours: 6
+  issue_failure_threshold: 6
+  heartbeat_stale_minutes: 55
+  watchdog_hours: 30
+  freshness_days: 90
+  registration_reminders: [7, 3, 1]
+  exam_reminders: [14, 7, 3, 1]
+notifications:
+  telegram: true
+  email: false
+  console: false
+  markdown: true
+  max_attempts: 5
+  retry_uncertain_delivery: false
+storage:
+  warning_size_mb: 350
+  reports_directory: reports
+llm:
+  enabled: false
+  prompt_version: edital_extraction_v1
+  model: ''
+  model_version: ''
