@@ -10,6 +10,7 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
+from sentinela import tracking
 from sentinela import watchdog as watchdog_module
 from sentinela.collector import FoundDocument, SourceOutcome
 from sentinela.config import Configuration, Secrets
@@ -23,6 +24,7 @@ from sentinela.models import (
     Notification,
     Opportunity,
     OpportunityVersion,
+    Position,
     RawSnapshot,
     Source,
 )
@@ -1164,3 +1166,44 @@ def test_changed_metadata_reprocesses_identical_bytes(session: Session, source: 
     session.commit()
     assert rechanged is True, "titulo novo sobre os mesmos bytes precisa reinterpretar"
     assert same_row.id == first.id  # still one version: the content did not change
+
+
+def test_a_dismissed_certame_stops_producing_deadline_alerts(
+    session: Session, source: Source, config: Configuration
+) -> None:
+    """Continuar lembrando o prazo de algo que ele recusou é o ruído que faz uma pessoa
+    parar de ler os alertas."""
+    report = RunReport(run_id=RUN_ID)
+    store(session, source, draft(), config, report)
+    for position in session.scalars(sa.select(Position).where(Position.eligible.is_(True))):
+        tracking.mark(session, position.id, "DISMISSED")
+    session.commit()
+    generate_deadline_alerts(session, config, date(2026, 10, 6), report, RUN_ID)
+    session.commit()
+    assert (
+        session.execute(
+            sa.select(sa.func.count())
+            .select_from(Notification)
+            .where(Notification.category == "DEADLINE")
+        ).scalar_one()
+        == 0
+    )
+
+
+def test_a_deadline_alert_tells_him_what_he_already_marked(
+    session: Session, source: Source, config: Configuration
+) -> None:
+    report = RunReport(run_id=RUN_ID)
+    store(session, source, draft(), config, report)
+    position = session.scalars(sa.select(Position).where(Position.eligible.is_(True))).first()
+    assert position is not None
+    tracking.mark(session, position.id, "REGISTERED")
+    session.commit()
+    generate_deadline_alerts(session, config, date(2026, 10, 6), report, RUN_ID)
+    session.commit()
+    body = session.scalars(
+        sa.select(Notification).where(Notification.category == "DEADLINE")
+    ).first()
+    assert body is not None
+    assert "Você marcou" in body.body
+    assert "inscrição feita" in body.body

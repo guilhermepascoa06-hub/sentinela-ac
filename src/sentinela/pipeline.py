@@ -15,7 +15,7 @@ from typing import Any
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
-from sentinela import alerts, diff, health
+from sentinela import alerts, diff, health, tracking
 from sentinela.collector import FoundDocument, SourceOutcome, safe_collect
 from sentinela.config import Configuration, Secrets
 from sentinela.db import database_size_mb
@@ -812,6 +812,9 @@ def generate_deadline_alerts(
     channels = channels_for(config)
     if not channels:
         return
+    # Ele pode ter descartado o certame. Continuar lembrando do prazo de algo que
+    # ele recusou e o tipo de ruido que faz uma pessoa parar de ler os alertas.
+    ignorados = tracking.dismissed_opportunities(session)
     thresholds = {
         "registration": list(config.monitoring.registration_reminders) + [0],
         "exam": list(config.monitoring.exam_reminders) + [0],
@@ -831,12 +834,25 @@ def generate_deadline_alerts(
         )
     ).all()
     for deadline, opportunity in rows:
+        if opportunity.id in ignorados:
+            continue
         days = alerts.deadline_alerts(
             deadline.due_date, today, thresholds.get(deadline.kind, [1, 0])
         )
         if days is None:
             continue
         names = [item.name for item in opportunity.positions if item.eligible]
+        marcados = tracking.by_position(
+            session, [item.id for item in opportunity.positions if item.eligible]
+        )
+        seus = [
+            f"{item.name}: {tracking.STATUS_LABEL[marcados[item.id].status]}"
+            for item in opportunity.positions
+            if item.id in marcados
+        ]
+        # O lembrete fala com quem ja se posicionou, em vez de repetir o aviso generico
+        # para alguem que ja se inscreveu.
+        extra = "Você marcou: " + "; ".join(seus) if seus else ""
         report.notifications_queued += queue_notification(
             session,
             key=alerts.idempotency_key(
@@ -849,6 +865,7 @@ def generate_deadline_alerts(
                 deadline.due_date,
                 (deadline.due_date - today).days,
                 positions=names,
+                extra=extra,
             ),
             channels=channels,
             run_id=run_id,

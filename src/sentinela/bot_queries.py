@@ -20,7 +20,17 @@ from sentinela.alerts import (
 from sentinela.config import Configuration
 from sentinela.domain import normalize, now, utc
 from sentinela.eligibility import effective_status
-from sentinela.models import Opportunity, OpportunityVersion, Position
+from sentinela.models import Opportunity, OpportunityVersion, Position, Tracking
+from sentinela.tracking import (
+    NEXT_STEP,
+    by_position,
+    followed,
+    forget,
+    mark,
+)
+from sentinela.tracking import (
+    STATUS_LABEL as TRACKING_LABEL,
+)
 
 Pair = tuple[Opportunity, Position]
 PAGE_SIZE = 5
@@ -244,7 +254,17 @@ def answer_card(session: Session, config: Configuration, term: str) -> str:
             tail += [label, link]
         else:
             tail.append(f"{label} endereço longo demais para o Telegram; veja no edital.")
-    tail += ["", f"Alterações: /historico {position.id[:8]}"]
+    mine = by_position(session, [position.id]).get(position.id)
+    if mine:
+        lines.append(f"Você marcou: {TRACKING_LABEL[mine.status]}")
+        if mine.note:
+            lines.append(f"Sua anotação: {short(mine.note, 200)}")
+    code = position.id[:8]
+    tail += [
+        "",
+        f"Alterações: /historico {code}",
+        f"Acompanhar: /salvar {code} · /inscrito {code} · /descartar {code}",
+    ]
     return _fit(lines, tail, omitted=short.omitted)
 
 
@@ -401,3 +421,121 @@ def answer_question(session: Session, config: Configuration, question: str) -> s
     if len(rows) == 1:
         return answer_card(session, config, rows[0][1].id)
     return _choices(rows, config)
+
+
+# ---------------------------------------------------------------- acompanhamento
+
+
+def _dates(opportunity: Opportunity) -> str:
+    return (
+        f"Inscrições: {period(opportunity.registration_start, opportunity.registration_deadline)}"
+        f" · Prova: {day(opportunity.exam_date)}"
+    )
+
+
+def answer_mark(session: Session, config: Configuration, term: str, status: str) -> str:
+    """Grava a decisão dele. Nada aqui altera o que o edital diz."""
+    found = _resolve(session, config, term)
+    if isinstance(found, str):
+        return found
+    opportunity, position = found
+    row = mark(session, position.id, status)
+    lines = [
+        f"Anotado: {_short(position.name, 100)} · #{position.id[:8]}",
+        _short(opportunity.institution, 140),
+        f"Como está para você: {TRACKING_LABEL[row.status]}",
+        NEXT_STEP[row.status],
+        _dates(opportunity),
+    ]
+    if row.note:
+        lines.append(f"Sua anotação: {_short(row.note, 200)}")
+    lines += ["", f"Anotar algo: /nota {position.id[:8]} sua observação", "Ver tudo: /meus"]
+    return "\n".join(lines)
+
+
+def answer_note(session: Session, config: Configuration, argument: str) -> str:
+    parts = argument.strip().split(maxsplit=1)
+    if len(parts) < 2:
+        return (
+            "Use /nota CÓDIGO seguido do texto. Exemplo: /nota 048e6507 estudar informática.\n"
+            "O código aparece na ficha do cargo, em /vagas e em /buscar."
+        )
+    found = _resolve(session, config, parts[0])
+    if isinstance(found, str):
+        return found
+    opportunity, position = found
+    row = mark(session, position.id, _current_status(session, position.id), parts[1][:1000])
+    return "\n".join(
+        [
+            f"Anotação salva em {_short(position.name, 100)} · #{position.id[:8]}",
+            _short(opportunity.institution, 140),
+            f"Como está para você: {TRACKING_LABEL[row.status]}",
+            f"Anotação: {_short(row.note, 400)}",
+            "",
+            "Ver tudo: /meus",
+        ]
+    )
+
+
+def _current_status(session: Session, position_id: str) -> str:
+    existing = by_position(session, [position_id]).get(position_id)
+    return existing.status if existing else "INTERESTED"
+
+
+def answer_forget(session: Session, config: Configuration, term: str) -> str:
+    found = _resolve(session, config, term)
+    if isinstance(found, str):
+        return found
+    _, position = found
+    removed = forget(session, position.id)
+    if not removed:
+        return f"{_short(position.name, 100)} não estava na sua lista. Nada mudou."
+    return "\n".join(
+        [
+            f"Removido da sua lista: {_short(position.name, 100)}",
+            "A anotação foi apagada junto. O cargo continua sendo monitorado normalmente.",
+        ]
+    )
+
+
+def _entry(row: Tracking, opportunity: Opportunity, position: Position, current: date) -> str:
+    state = effective_status(opportunity, current)
+    lines = [
+        f"• {_short(position.name, 90)} · #{position.id[:8]} — {TRACKING_LABEL[row.status]}",
+        f"  {_short(opportunity.institution, 100)}",
+        f"  {STATUS_LABEL.get(state, state)} · {_dates(opportunity)}",
+    ]
+    if row.status != "DISMISSED":
+        lines.append(f"  {NEXT_STEP[row.status]}")
+    if row.note:
+        lines.append(f"  Anotação: {_short(row.note, 200)}")
+    return "\n".join(lines)
+
+
+def answer_followed(session: Session, config: Configuration) -> str:
+    rows = followed(session)
+    if not rows:
+        return (
+            "Você ainda não está acompanhando nenhum cargo.\n\n"
+            "Use /salvar CÓDIGO para ficar de olho em um, ou /inscrito CÓDIGO quando "
+            "já tiver feito a inscrição. O código aparece em /vagas e em /buscar."
+        )
+    current = today(config)
+    session_map = {position.id: position for _row, position in rows}
+    opportunities = {
+        position.opportunity_id: position.opportunity for position in session_map.values()
+    }
+    active = [(row, position) for row, position in rows if row.status != "DISMISSED"]
+    dropped = [(row, position) for row, position in rows if row.status == "DISMISSED"]
+    parts = [f"Você está acompanhando {len(active)} cargo(s)."]
+    parts += [
+        _entry(row, opportunities[position.opportunity_id], position, current)
+        for row, position in active[:10]
+    ]
+    if len(active) > 10:
+        parts.append(f"Mais {len(active) - 10} não couberam nesta lista.")
+    if dropped:
+        nomes = "; ".join(_short(position.name, 60) for _row, position in dropped[:5])
+        parts.append(f"Descartados ({len(dropped)}): {nomes}. Não aviso mais sobre eles.")
+    parts.append("Mudar: /salvar CÓDIGO · /inscrito CÓDIGO · /esquecer CÓDIGO")
+    return _truncate("\n\n".join(parts), MAX_REPLY)

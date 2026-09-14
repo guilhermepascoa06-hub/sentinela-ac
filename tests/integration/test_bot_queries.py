@@ -348,3 +348,94 @@ def test_history_without_any_change_says_so_instead_of_listing_noise(
     text = ask(session, config, f"/historico {position.id[:8]}")
     assert "Nenhuma alteração de campo foi registrada" in text
     assert "Uma releitura do documento não mudou nenhum campo." in text
+
+
+# ---------------------------------------------------------------- acompanhamento
+
+
+def test_marking_a_cargo_changes_what_the_bot_says_not_what_the_edital_says(
+    session: Session, config: Configuration
+) -> None:
+    """Uma decisão pessoal jamais vira fato oficial: é a linha que este projeto inteiro
+    existe para não cruzar."""
+    opportunity, position = cargo(session)
+    code = position.id[:8]
+    reply = ask(session, config, f"/inscrito {code}")
+    assert "inscrição feita" in reply
+    assert opportunity.status == "REGISTRATION_OPEN"
+    assert position.eligible is True
+    assert "Você marcou: inscrição feita" in ask(session, config, f"/cargo {code}")
+
+
+def test_the_list_shows_the_next_step_and_the_dates(
+    session: Session, config: Configuration
+) -> None:
+    _, position = cargo(session)
+    ask(session, config, f"/salvar {position.id[:8]}")
+    reply = ask(session, config, "/meus")
+    assert "Agente Legislativo" in reply
+    assert "de olho" in reply
+    assert "Próximo passo" in reply
+    # A fixture fecha as inscrições 30 dias depois de TODAY.
+    assert "14/10/2026" in reply
+
+
+def test_an_empty_list_teaches_the_command_instead_of_saying_nothing(
+    session: Session, config: Configuration
+) -> None:
+    cargo(session)
+    reply = ask(session, config, "/meus")
+    assert "ainda não está acompanhando" in reply
+    assert "/salvar" in reply
+
+
+def test_a_note_is_kept_and_does_not_reset_the_status(
+    session: Session, config: Configuration
+) -> None:
+    _, position = cargo(session)
+    code = position.id[:8]
+    ask(session, config, f"/inscrito {code}")
+    ask(session, config, f"/nota {code} pagar a taxa ate 14/10")
+    card = ask(session, config, f"/cargo {code}")
+    assert "Você marcou: inscrição feita" in card
+    assert "pagar a taxa ate 14/10" in card
+
+
+def test_a_note_without_text_explains_the_format(session: Session, config: Configuration) -> None:
+    _, position = cargo(session)
+    assert "Use /nota CÓDIGO" in ask(session, config, f"/nota {position.id[:8]}")
+
+
+def test_forgetting_removes_the_entry_and_keeps_monitoring_the_cargo(
+    session: Session, config: Configuration
+) -> None:
+    _, position = cargo(session)
+    code = position.id[:8]
+    ask(session, config, f"/salvar {code}")
+    reply = ask(session, config, f"/esquecer {code}")
+    assert "Removido da sua lista" in reply
+    assert "continua sendo monitorado" in reply
+    assert "ainda não está acompanhando" in ask(session, config, "/meus")
+
+
+def test_a_dismissed_cargo_is_listed_apart_from_what_he_is_pursuing(
+    session: Session, config: Configuration
+) -> None:
+    _, keep = cargo(session)
+    _, drop = cargo(session, "Técnico de Informática")
+    ask(session, config, f"/salvar {keep.id[:8]}")
+    ask(session, config, f"/descartar {drop.id[:8]}")
+    reply = ask(session, config, "/meus")
+    assert "acompanhando 1 cargo" in reply
+    assert "Descartados (1)" in reply
+    assert "Não aviso mais sobre eles" in reply
+
+
+def test_marking_needs_an_unambiguous_cargo_instead_of_picking_one(
+    session: Session, config: Configuration
+) -> None:
+    cargo(session, "Agente Legislativo")
+    cargo(session, "Agente Legislativo - Libras")
+    reply = ask(session, config, "/salvar agente legislativo")
+    assert "Escolha pelo nome completo ou pelo código" in reply
+    assert "ainda não está acompanhando" in ask(session, config, "/meus")

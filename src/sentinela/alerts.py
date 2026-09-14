@@ -196,7 +196,13 @@ def change_message(opportunity: Any, rendered_diff: str) -> str:
 
 
 def deadline_message(
-    opportunity: Any, kind: str, due: date, days: int, *, positions: list[str] | None = None
+    opportunity: Any,
+    kind: str,
+    due: date,
+    days: int,
+    *,
+    positions: list[str] | None = None,
+    extra: str = "",
 ) -> str:
     what = {
         "registration": "ENCERRAMENTO DAS INSCRIÇÕES",
@@ -216,7 +222,10 @@ def deadline_message(
         ),
         ("Edital oficial:", opportunity.official_edital_url or "não informado"),
     )
-    return _truncate(f"{CATEGORY_TITLE['DEADLINE']}\n{what} {when}\n\n{body}".rstrip())
+    message = f"{CATEGORY_TITLE['DEADLINE']}\n{what} {when}\n\n{body}".rstrip()
+    if extra:
+        message = f"{message}\n\n{extra.strip()}"
+    return _truncate(message)
 
 
 def system_message(title: str, detail: str, actions: list[str] | None = None) -> str:

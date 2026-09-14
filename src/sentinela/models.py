@@ -401,3 +401,22 @@ class SystemEvent(Base):
     message: Mapped[str] = mapped_column(default="")
     context: Mapped[dict[str, Any]] = mapped_column(default=dict)
     created_at: Mapped[datetime] = mapped_column(index=True)
+
+
+class Tracking(Base):
+    """O que o usuário decidiu sobre um cargo. Nunca um fato lido de edital.
+
+    Fica em tabela própria de propósito: "eu me inscrevi" não é "as inscrições estão
+    abertas". Misturar as duas coisas daria ao palpite do usuário o peso do documento
+    oficial, que é exatamente o que este sistema existe para não fazer.
+    """
+
+    __tablename__ = "tracking"
+    id: Mapped[str] = _pk()
+    position_id: Mapped[str] = mapped_column(
+        UUIDType, sa.ForeignKey("positions.id", ondelete="CASCADE"), unique=True
+    )
+    status: Mapped[str] = mapped_column(sa.String(16), default="INTERESTED")
+    note: Mapped[str | None]
+    created_at: Mapped[datetime]
+    updated_at: Mapped[datetime]

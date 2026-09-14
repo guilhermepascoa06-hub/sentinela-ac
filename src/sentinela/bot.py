@@ -14,6 +14,7 @@ Two rules govern everything here:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any
@@ -28,7 +29,11 @@ from sentinela.bot_queries import (
     MAX_REPLY,
     accepting_candidates,
     answer_card,
+    answer_followed,
+    answer_forget,
     answer_history,
+    answer_mark,
+    answer_note,
     answer_question,
     answer_search,
 )
@@ -52,14 +57,23 @@ AJUDA = """Sentinela AC — o que eu respondo
 /prazos    o que vence nos próximos dias
 /status    se o monitoramento está vivo
 /fontes    quais portais estão com problema
+
+Seu acompanhamento:
+/meus      o que você está acompanhando e o próximo passo
+/salvar CÓDIGO      ficar de olho neste cargo
+/inscrito CÓDIGO    marcar que você já se inscreveu
+/nota CÓDIGO texto  guardar uma observação sua
+/descartar CÓDIGO   parar de receber os prazos deste cargo
+/esquecer CÓDIGO    tirar da sua lista
 /ajuda     esta lista
 
 Pode perguntar em texto normal também, por exemplo:
 "qual o salário do agente legislativo?"
 "quando é a prova?"
 
-As consultas de cargo funcionam sem IA. Use /buscar TERMO --pagina 2 para continuar
-uma lista. Cargos fora do filtro e inscrições encerradas aparecem identificados.
+As consultas funcionam sem IA. Use /buscar TERMO --pagina 2 para continuar uma lista.
+Cargos fora do filtro e inscrições encerradas aparecem identificados. O que você marca
+é anotação sua: não muda o que o edital diz, muda só o que eu falo com você.
 
 Só respondo com o que está registrado no banco, a partir de documento oficial
 coletado. Quando não sei, eu digo que não sei."""
@@ -221,6 +235,7 @@ def answer_fontes(session: Session, config: Configuration) -> str:
 
 COMMANDS = {
     "/vagas": answer_vagas,
+    "/meus": answer_followed,
     "/prazos": answer_prazos,
     "/status": answer_status,
     "/fontes": answer_fontes,
@@ -323,7 +338,18 @@ def route(session: Session, config: Configuration, secrets: Secrets, text: str) 
     command = text.strip().split()[0].lower().split("@")[0] if text.strip() else ""
     if command in ("/start", "/ajuda", "/help"):
         return AJUDA
-    query_handlers = {"/buscar": answer_search, "/cargo": answer_card, "/historico": answer_history}
+    query_handlers: dict[str, Callable[[Session, Configuration, str], str]] = {
+        "/buscar": answer_search,
+        "/cargo": answer_card,
+        "/historico": answer_history,
+        "/nota": answer_note,
+        "/esquecer": answer_forget,
+        # O que ele decidiu sobre o cargo. Só comando faz isso: uma frase em texto livre
+        # não pode disparar escrita, porque mensagem recebida é dado, nunca instrução.
+        "/salvar": lambda s, c, t: answer_mark(s, c, t, "INTERESTED"),
+        "/inscrito": lambda s, c, t: answer_mark(s, c, t, "REGISTERED"),
+        "/descartar": lambda s, c, t: answer_mark(s, c, t, "DISMISSED"),
+    }
     if command in query_handlers:
         argument = text.strip().split(maxsplit=1)
         return _truncate(
